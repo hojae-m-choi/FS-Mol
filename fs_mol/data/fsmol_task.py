@@ -52,9 +52,12 @@ class MoleculeDatapoint:
     smiles: str
     graph: GraphData
     numeric_label: float
+    log_numeric_label: float
     bool_label: bool
     fingerprint: Optional[np.ndarray]
     descriptors: Optional[np.ndarray]
+    assay_type: str
+    relation: str
 
     def get_fingerprint(self) -> np.ndarray:
         if self.fingerprint is not None:
@@ -128,6 +131,7 @@ class FSMolTask:
                     smiles=raw_sample["SMILES"],
                     bool_label=bool(float(raw_sample["Property"])),
                     numeric_label=float(raw_sample.get("RegressionProperty") or "nan"),
+                    log_numeric_label=float(raw_sample.get("LogRegressionProperty") or "nan"),
                     fingerprint=fingerprint,
                     descriptors=descriptors,
                     graph=GraphData(
@@ -138,6 +142,8 @@ class FSMolTask:
                             for edge_feats in graph_data.get("edge_features") or []
                         ],
                     ),
+                    assay_type=raw_sample["AssayType"],
+                    relation=raw_sample["Relation"]
                 )
             )
 
