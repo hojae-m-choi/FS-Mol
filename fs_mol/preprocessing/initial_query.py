@@ -11,7 +11,8 @@ import json
 import logging
 from pathlib import Path
 from typing import Tuple, Dict, Any
-import mysql.connector
+import mysql.connector as connector
+import sqlite3 as connector
 from mysql.connector import Error
 
 import pandas as pd
@@ -78,7 +79,7 @@ def run_initial_query(
     assay_list_file = os.path.join(base_output_dir, "assays.jsonl")
 
     try:
-        conn = mysql.connector.connect(**db_config)
+        conn = connector.connect(**db_config)
 
         if conn.is_connected():
             logger.info("Connected to mysql database")
@@ -149,7 +150,7 @@ def recreate_assay_list_file(base_output_dir: str, assay_list_file: str) -> None
 
 def run():
 
-    db_config = read_db_config()
+    db_config = read_db_config(section='sqlite') # default : None -> 'mysql'
     assay_config = read_db_config(section="initialquery")
     base_output_dir = assay_config["output_dir"]
 
