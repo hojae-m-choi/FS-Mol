@@ -15,7 +15,7 @@ from rdkit.Chem.Descriptors import MolWt
 from fs_mol.preprocessing.utils.standardizer import Standardizer
 
 standard_unit_set = {"nM", "%", "uM"}
-
+standard_acttype_set = {'IC50', 'AC50', 'EC50', "Kd", 'Ki'}
 
 class MolError(Exception):
     """Custom exception for failure to convert molecule."""
