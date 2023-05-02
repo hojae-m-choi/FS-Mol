@@ -5,6 +5,7 @@ CHEMBL_ASSAY_PROTEIN = (
     " act.standard_value AS standard_value,"
     " act.standard_units AS standard_units,"
     " act.standard_relation AS standard_relation,"
+    " act.standard_type AS activity_type,"
     " act.activity_comment AS activity_comment,"
     " a.chembl_id AS chembl_id,"
     " a.assay_type AS assay_type,"
@@ -30,6 +31,7 @@ CHEMBL_ASSAY_PROTEIN = (
 )
 
 DISTINCT_TABLES = {
+    "activity_type": ("SELECT DISTINCT d.chembl_id, d.activity_type FROM ({}) AS d;"),
     "activity_comment": ("SELECT DISTINCT d.chembl_id, d.activity_comment FROM ({}) AS d;"),
     "standard_unit": ("SELECT DISTINCT d.chembl_id, d.standard_units FROM ({}) AS d;"),
     "target_id": ("SELECT DISTINCT  d.chembl_id, d.target_id FROM ({}) AS d;"),
@@ -48,6 +50,7 @@ EXTENDED_SINGLE_ASSAY_NOPROTEIN = (
     " act.standard_value AS value,"
     " act.standard_units AS units,"
     " act.standard_relation AS relation,"
+    " act.standard_type AS activity_type,"
     " act.activity_comment AS comment,"
     " a.chembl_id AS chembl_id,"
     " a.assay_type AS assay_type,"
@@ -62,6 +65,7 @@ EXTENDED_SINGLE_ASSAY_NOPROTEIN = (
 )
 
 COUNT_QUERIES = {
+    "num_activity_type": "SELECT count(e.activity_type) AS num_activity_type FROM ({}) AS e GROUP BY e.chembl_id;",
     "num_activity_comment": "SELECT count(e.activity_comment) AS num_activity_comment FROM ({}) AS e GROUP BY e.chembl_id;",
     "num_standard_unit": "SELECT count(e.standard_units) AS num_standard_unit FROM ({}) AS e GROUP BY e.chembl_id;",
     "num_target_id": "SELECT count(e.target_id) AS num_target_id FROM ({}) AS e GROUP BY e.chembl_id;",
@@ -75,6 +79,7 @@ FIELDNAMES = [
     "standard_value",
     "standard_units",
     "standard_relation",
+    "activity_type",
     "activity_comment",
     "chembl_id",
     "assay_type",
@@ -99,6 +104,7 @@ CELL_FIELDS = [
 ]
 
 SUMMARY_FIELDNAMES = [
+    "activity_type",
     "activity_comment",
     "standard_unit",
     "target_id",
@@ -107,6 +113,7 @@ SUMMARY_FIELDNAMES = [
 ]
 COUNTED_SUMMARY_FIELDNAMES = [
     "chembl_id",
+    "num_activity_type",
     "num_activity_comment",
     "num_standard_unit",
     "num_target_id",
