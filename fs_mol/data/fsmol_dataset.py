@@ -105,7 +105,7 @@ class FSMolDataset:
                 ]
 
         return FSMolDataset(
-            train_data_paths=get_fold_file_names("train"),
+            train_data_paths=get_fold_file_names("train"),  # this line takes too much time in debugging
             valid_data_paths=sorted(get_fold_file_names("valid")),
             test_data_paths=sorted(get_fold_file_names("test")),
             **kwargs,
