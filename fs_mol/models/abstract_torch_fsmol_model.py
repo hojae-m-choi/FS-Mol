@@ -48,9 +48,10 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class TorchFSMolModelOutput:
+class TorchFSMolModelOutput:  # TODO: regression label
     # Predictions for each input molecule, as a [NUM_MOLECULES, 1] float tensor
     molecule_binary_label: torch.Tensor
+    molecule_regression_label: torch.Tensor
 
 
 @dataclass
@@ -317,7 +318,7 @@ def run_on_data_iterable(
 
         # Apply sigmoid to have predictions in appropriate range for computing (scikit) scores.
         num_samples = labels.shape[0]
-        predicted_labels = torch.sigmoid(predictions.molecule_binary_label).detach().cpu()
+        predicted_labels = torch.sigmoid(predictions.molecule_binary_label).detach().cpu()  #TODO: if in regression task, prediction should be inverse transformed.
         for i in range(num_samples):
             task_id = sample_to_task_id[i].item()
             per_task_preds[task_id].append(predicted_labels[i].item())
