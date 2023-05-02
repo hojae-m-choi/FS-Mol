@@ -13,6 +13,16 @@ from sklearn.metrics import (
     roc_auc_score,
     average_precision_score,
     cohen_kappa_score,
+    matthews_corrcoef,
+    mean_absolute_error,
+    mean_squared_error,
+    max_error,
+    r2_score 
+)
+from scipy.stats import (
+    spearmanr,
+    pearsonr,
+    kendalltau
 )
 
 
@@ -33,7 +43,7 @@ BinaryMetricType = Literal[
     "acc", "balanced_acc", "f1", "prec", "recall", "roc_auc", "avg_precision", "kappa"
 ]
 
-
+# NOTE: similar function: eval_model_by_finetuning_on_task on fs_mol/models/abstract_torch_fsmol_model.py
 def compute_binary_task_metrics(predictions: List[float], labels: List[float]) -> BinaryEvalMetrics:
     normalized_predictions = [
         pred >= 0.5 for pred in predictions
@@ -54,6 +64,41 @@ def compute_binary_task_metrics(predictions: List[float], labels: List[float]) -
         roc_auc=roc_auc,
         avg_precision=average_precision_score(labels, predictions),
         kappa=cohen_kappa_score(labels, normalized_predictions),
+    )
+
+@dataclass(frozen=True)
+class RegressionEvalMetrics:
+    size: int
+    mae: float
+    rmse: float
+    mxe: float
+    pcc: float  # pearson correlation
+    ci: float  # c statistics ( concordance index )
+    scc: float  # spearman correlation
+    mcc: float
+    r2: float
+    tau: float
+
+
+RegressionMetricType = Literal[
+    "mae", "rmse", "mxe", "pcc", "ci", "scc", "mcc", "r2", "tau"
+]
+
+
+def compute_regression_task_metrics(predictions: List[float], labels: List[float]) -> RegressionEvalMetrics:
+    # predictions should be inverse-scaled value
+    
+    return RegressionEvalMetrics(
+        size=len(predictions),
+        mae=mean_absolute_error(labels, predictions),
+        rmse=np.sqrt(mean_squared_error(labels, predictions)),
+        mxe=max_error(labels, predictions),
+        pcc=pearsonr(labels, predictions),
+        ci=(kendalltau(labels, predictions).statistic+1)/2,
+        scc=spearmanr(labels, predictions),
+        mcc=matthews_corrcoef(labels, predictions),
+        r2=r2_score(labels, predictions),
+        tau=kendalltau(labels, predictions)
     )
 
 
