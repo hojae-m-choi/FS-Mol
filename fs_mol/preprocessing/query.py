@@ -11,8 +11,10 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Any
-import mysql.connector
-from mysql.connector import Error
+# import mysql.connector as connector
+import sqlite3 as connector
+# from mysql.connector import Error
+from sqlite3 import Error
 
 from pyreporoot import project_root
 
@@ -64,8 +66,9 @@ def run_query_on_assay(
     fieldnames.extend(PROTEIN_FIELDS)
 
     # output filename
-    filename = os.path.join(output_dir, "{}.csv".format(assay))
-
+    filename = os.path.join(output_dir, "raw_data", "{}.csv".format(assay))
+    os.makedirs(os.path.join(output_dir, "raw_data"), exist_ok=True)
+    
     # full query attempt
     rows = query_db(cursor, assay, query)
 
@@ -144,7 +147,7 @@ def run_query_on_assay(
 
 def run(args):
 
-    db_config = read_db_config()
+    db_config = read_db_config(section='sqlite')
     assay_config = read_db_config(section="assays")
 
     if args.save_dir is None:
@@ -154,7 +157,7 @@ def run(args):
     os.makedirs(output_dir, exist_ok=True)
 
     if args.assay_list_file is None:
-        assay_config = read_db_config(section="assays")
+        assay_config = read_db_config(section="assays") # TODO: del this line not nessacery
         assay_list = read_assay_list(assay_config["assay_list_file"])
     else:
         assay_list = read_assay_list(args.assay_list_file)
@@ -188,9 +191,9 @@ def run(args):
 
     # access the database and perform the queries
     try:
-        conn = mysql.connector.connect(**db_config)
+        conn = connector.connect(**db_config)
 
-        if conn.is_connected():
+        if hasattr(conn, 'is_connected') and conn.is_connected():
             logger.info("Connected to mysql database")
 
         cursor = conn.cursor()
@@ -212,7 +215,7 @@ def run(args):
         logger.error(e)
 
     finally:
-        if conn is not None and conn.is_connected():
+        if conn is not None and hasattr(conn, 'is_connected') and conn.is_connected():
             conn.close()
             if cursor is not None:
                 cursor.close()
