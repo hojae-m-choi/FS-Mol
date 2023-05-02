@@ -11,9 +11,10 @@ import json
 import logging
 from pathlib import Path
 from typing import Tuple, Dict, Any
-import mysql.connector as connector
+# import mysql.connector as connector
 import sqlite3 as connector
-from mysql.connector import Error
+# from mysql.connector import Error
+from sqlite3 import Error
 
 import pandas as pd
 
@@ -46,7 +47,7 @@ def get_confidence_scores(cursor, output_dir: str) -> Tuple[str, str]:
     With an open database cursor, query for the meanings of the
     confidence scores and save out to a csv.
     """
-    query = "select csl.confidence_score, csl.description " "from confidence_score_lookup as csl;"
+    query = "SELECT csl.confidence_score, csl.description " "FROM confidence_score_lookup AS csl;"
     cursor.execute(query)
     score_rows = cursor.fetchall()
     print(score_rows)
@@ -81,7 +82,7 @@ def run_initial_query(
     try:
         conn = connector.connect(**db_config)
 
-        if conn.is_connected():
+        if hasattr(conn, 'is_connected') and conn.is_connected():
             logger.info("Connected to mysql database")
 
         # first, grab the confidence scores
@@ -120,7 +121,7 @@ def run_initial_query(
         print(e)
 
     finally:
-        if conn is not None and conn.is_connected() and close_cursor:
+        if conn is not None and hasattr(conn, 'is_connected') and conn.is_connected() and close_cursor:
             conn.close()
             if cursor is not None:
                 cursor.close()

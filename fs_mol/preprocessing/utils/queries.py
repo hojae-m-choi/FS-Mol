@@ -1,23 +1,23 @@
 """ Queries and fieldnames used to extract all data from ChEMBL """
 
 CHEMBL_ASSAY_PROTEIN = (
-    "SELECT s.canonical_smiles as smiles, act.pchembl_value as pchembl,"
-    " act.standard_value as standard_value,"
-    " act.standard_units as standard_units,"
-    " act.standard_relation as standard_relation,"
-    " act.activity_comment as activity_comment,"
-    " a.chembl_id as chembl_id,"
-    " a.assay_type as assay_type,"
-    " a.assay_organism as organism,"
-    " a.confidence_score as confidence_score,"
-    " td.tid as target_id,"
-    " td.pref_name as target,"
-    " tt.target_type as target_type,"
-    " protcls.protein_class_id as protein_id,"
-    " protcls.pref_name as protein_class_name,"
-    " protcls.short_name as protein_short_name,"
-    " protcls.class_level as protein_class_level,"
-    " protcls.protein_class_desc as protein_class_desc"
+    "SELECT s.canonical_smiles AS smiles, act.pchembl_value AS pchembl,"
+    " act.standard_value AS standard_value,"
+    " act.standard_units AS standard_units,"
+    " act.standard_relation AS standard_relation,"
+    " act.activity_comment AS activity_comment,"
+    " a.chembl_id AS chembl_id,"
+    " a.assay_type AS assay_type,"
+    " a.assay_organism AS organism,"
+    " a.confidence_score AS confidence_score,"
+    " td.tid AS target_id,"
+    " td.pref_name AS target,"
+    " tt.target_type AS target_type,"
+    " protcls.protein_class_id AS protein_id,"
+    " protcls.pref_name AS protein_class_name,"
+    " protcls.short_name AS protein_short_name,"
+    " protcls.class_level AS protein_class_level,"
+    " protcls.protein_class_desc AS protein_class_desc"
     " FROM assays a"
     " JOIN activities act ON a.assay_id = act.assay_id"
     " JOIN compound_structures s ON act.molregno = s.molregno"
@@ -30,31 +30,31 @@ CHEMBL_ASSAY_PROTEIN = (
 )
 
 DISTINCT_TABLES = {
-    "activity_comment": ("SELECT DISTINCT d.chembl_id, d.activity_comment FROM ({}) as d;"),
-    "standard_unit": ("SELECT DISTINCT d.chembl_id, d.standard_units FROM ({}) as d;"),
-    "target_id": ("SELECT DISTINCT  d.chembl_id, d.target_id FROM ({}) as d;"),
+    "activity_comment": ("SELECT DISTINCT d.chembl_id, d.activity_comment FROM ({}) AS d;"),
+    "standard_unit": ("SELECT DISTINCT d.chembl_id, d.standard_units FROM ({}) AS d;"),
+    "target_id": ("SELECT DISTINCT  d.chembl_id, d.target_id FROM ({}) AS d;"),
     "protein_class_level": (
-        " SELECT DISTINCT d.chembl_id, d.protein_class_level as protein_class_level"
-        " FROM ({}) as d;"
+        " SELECT DISTINCT d.chembl_id, d.protein_class_level AS protein_class_level"
+        " FROM ({}) AS d;"
     ),
     "target_type": (
-        " SELECT DISTINCT d.chembl_id, d.target_type as target_type" " FROM ({}) as d;"
+        " SELECT DISTINCT d.chembl_id, d.target_type AS target_type" " FROM ({}) AS d;"
     ),
 }
 
 EXTENDED_SINGLE_ASSAY_NOPROTEIN = (
-    "SELECT s.canonical_smiles as smiles,"
-    " act.pchembl_value as pchembl,"
-    " act.standard_value as value,"
-    " act.standard_units as units,"
-    " act.standard_relation as relation,"
-    " act.activity_comment as comment,"
-    " a.chembl_id as chembl_id,"
-    " a.assay_type as assay_type,"
-    " a.assay_organism as organism,"
-    " a.confidence_score as confidence_score,"
-    " a.assay_cell_type as cell_type,"
-    " a.assay_tissue as tissue"
+    "SELECT s.canonical_smiles AS smiles,"
+    " act.pchembl_value AS pchembl,"
+    " act.standard_value AS value,"
+    " act.standard_units AS units,"
+    " act.standard_relation AS relation,"
+    " act.activity_comment AS comment,"
+    " a.chembl_id AS chembl_id,"
+    " a.assay_type AS assay_type,"
+    " a.assay_organism AS organism,"
+    " a.confidence_score AS confidence_score,"
+    " a.assay_cell_type AS cell_type,"
+    " a.assay_tissue AS tissue"
     " FROM assays a"
     " JOIN activities act on a.assay_id = act.assay_id"
     " JOIN compound_structures s"
@@ -62,11 +62,11 @@ EXTENDED_SINGLE_ASSAY_NOPROTEIN = (
 )
 
 COUNT_QUERIES = {
-    "num_activity_comment": "SELECT count(e.activity_comment) as num_activity_comment FROM ({}) as e GROUP BY e.chembl_id;",
-    "num_standard_unit": "SELECT count(e.standard_units) as num_standard_unit FROM ({}) as e GROUP BY e.chembl_id;",
-    "num_target_id": "SELECT count(e.target_id) as num_target_id FROM ({}) as e GROUP BY e.chembl_id;",
-    "num_protein_class_level": "SELECT count(e.protein_class_level) as num_protein_class_level FROM ({}) as e GROUP BY e.chembl_id;",
-    "num_target_type": "SELECT count(e.target_type) as num_target_type FROM ({}) as e GROUP BY e.chembl_id;",
+    "num_activity_comment": "SELECT count(e.activity_comment) AS num_activity_comment FROM ({}) AS e GROUP BY e.chembl_id;",
+    "num_standard_unit": "SELECT count(e.standard_units) AS num_standard_unit FROM ({}) AS e GROUP BY e.chembl_id;",
+    "num_target_id": "SELECT count(e.target_id) AS num_target_id FROM ({}) AS e GROUP BY e.chembl_id;",
+    "num_protein_class_level": "SELECT count(e.protein_class_level) AS num_protein_class_level FROM ({}) AS e GROUP BY e.chembl_id;",
+    "num_target_type": "SELECT count(e.target_type) AS num_target_type FROM ({}) AS e GROUP BY e.chembl_id;",
 }
 
 FIELDNAMES = [
