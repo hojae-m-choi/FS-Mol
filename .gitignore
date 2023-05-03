@@ -354,3 +354,4 @@ datasets/fs-mol
 helper_files/*
 datasets/chembl*
 tmp
+outputs/*

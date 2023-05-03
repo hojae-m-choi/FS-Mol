@@ -2,7 +2,7 @@
 import json
 import logging
 import sys
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Union
 
 import numpy as np
 import sklearn.ensemble
@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root()))
 
 from fs_mol.data.fsmol_task import FSMolTaskSample
 from fs_mol.utils.cli_utils import str2bool
-from fs_mol.utils.metrics import BinaryEvalMetrics, compute_binary_task_metrics
+from fs_mol.utils.metrics import BinaryEvalMetrics, compute_binary_task_metrics, RegressionEvalMetrics, compute_regression_task_metrics
 from fs_mol.utils.test_utils import (
     eval_model,
     add_eval_cli_args,
@@ -37,8 +37,15 @@ DEFAULT_GRID_SEARCH: Dict[str, Dict[str, List[Any]]] = {
 }
 
 NAME_TO_MODEL_CLS: Dict[str, Any] = {
-    "randomForest": sklearn.ensemble.RandomForestClassifier,
-    "kNN": sklearn.neighbors.KNeighborsClassifier,
+    "randomForest": {
+        'classification': sklearn.ensemble.RandomForestClassifier,
+        'regression': sklearn.ensemble.RandomForestRegressor,
+    },
+    
+    "kNN": {
+        'classification': sklearn.neighbors.KNeighborsClassifier,
+        'regression': sklearn.neighbors.KNeighborsRegressor,
+    },
 }
 
 
@@ -48,7 +55,8 @@ def test(
     use_grid_search: bool = True,
     grid_search_parameters: Optional[Dict[str, Any]] = None,
     model_params: Dict[str, Any] = {},
-) -> BinaryEvalMetrics:
+    regression_task: bool = False
+) -> Union[RegressionEvalMetrics,BinaryEvalMetrics]:
     train_data = task_sample.train_samples
     test_data = task_sample.test_samples
 
@@ -56,8 +64,15 @@ def test(
     X_train = np.array([x.get_fingerprint() for x in train_data])
     X_test = np.array([x.get_fingerprint() for x in test_data])
     logger.info(f" Training {model_name} with {X_train.shape[0]} datapoints.")
-    y_train = [float(x.bool_label) for x in train_data]
-    y_test = [float(x.bool_label) for x in test_data]
+    if regression_task:
+        y_train = [float(x.numeric_label) for x in train_data]  # regression label
+        # TODO: scaling y_train
+        y_test = [float(x.numeric_label) for x in test_data]  # regression label  
+        task_type = 'regression'
+    else:
+        y_train = [float(x.bool_label) for x in train_data]  # binary label
+        y_test = [float(x.bool_label) for x in test_data]  # binary label
+        task_type = 'classification'
 
     # use the train data to train a baseline model with CV grid search
     # reinstantiate model for each seed.
@@ -71,19 +86,24 @@ def test(
                     x for x in grid_search_parameters["n_neighbors"] if x < int(len(train_data) / 2)
                 ]
                 grid_search_parameters.update({"n_neighbors": permitted_n_neighbors})
-            grid_search = GridSearchCV(NAME_TO_MODEL_CLS[model_name](), grid_search_parameters)
+            grid_search = GridSearchCV(NAME_TO_MODEL_CLS[model_name][task_type](), grid_search_parameters)
         grid_search.fit(X_train, y_train)
         model = grid_search.best_estimator_
     else:
-        model = NAME_TO_MODEL_CLS[model_name]()
+        model = NAME_TO_MODEL_CLS[model_name][task_type]()
         params = model.get_params()
         params.update(model_params)
-        model.set_params()
+        model.set_params(**params) # maybe errota. no **params in parameters
         model.fit(X_train, y_train)
 
     # Compute test results:
-    y_predicted_true_probs = model.predict_proba(X_test)[:, 1]
-    test_metrics = compute_binary_task_metrics(y_predicted_true_probs, y_test)
+    if regression_task:
+        y_predicted = model.predict(X_test)
+        # TODO: inverse scaling y_predicted
+        test_metrics = compute_regression_task_metrics(y_predicted, y_test)
+    else:
+        y_predicted_true_probs = model.predict_proba(X_test)[:, 1]
+        test_metrics = compute_binary_task_metrics(y_predicted_true_probs, y_test)
 
     logger.info(f" Test metrics: {test_metrics}")
     logger.info(
@@ -98,12 +118,13 @@ def run_from_args(args) -> None:
 
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> BinaryEvalMetrics:
+    ) -> Union[RegressionEvalMetrics, BinaryEvalMetrics]:
         return test(
             model_name=args.model,
             task_sample=task_sample,
             use_grid_search=args.grid_search,
             model_params=args.model_params,
+            regression_task=args.regression_task
         )
 
     eval_model(
@@ -149,6 +170,7 @@ def run():
         ),
     )
     parser.add_argument("--debug", dest="debug", action="store_true", help="Enable debug routines")
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     args = parser.parse_args()
 
     run_and_debug(lambda: run_from_args(args), args.debug)
