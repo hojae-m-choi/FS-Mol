@@ -113,9 +113,10 @@ def avg_metrics_over_tasks(
 
     # compute the mean and std across tasks by going through values (drop within task stds)
     aggregated_over_tasks = {}
-    for metric_field in dataclasses.fields(BinaryEvalMetrics):
-        metric_values = [x.get(metric_field.name)[0] for _, x in aggregated_metrics.items()]
-        aggregated_over_tasks[metric_field.name] = (np.mean(metric_values), np.std(metric_values))
+    metric_fields: List[str] = list(list(aggregated_metrics.values())[0].keys())
+    for metric_field in metric_fields:
+        metric_values = [x.get(metric_field)[0] for _, x in aggregated_metrics.items()]
+        aggregated_over_tasks[metric_field] = (np.mean(metric_values), np.std(metric_values))
 
     return aggregated_over_tasks
 
@@ -126,7 +127,14 @@ def avg_task_metrics_list(
     aggregated_metrics = {}
 
     # Compute mean/std:
-    for metric_field in dataclasses.fields(BinaryEvalMetrics):
+    if issubclass(type(results[0]), BinaryEvalMetrics):
+        metric_fields = dataclasses.fields(BinaryEvalMetrics)
+    elif issubclass(type(results[0]), RegressionEvalMetrics):
+        metric_fields = dataclasses.fields(RegressionEvalMetrics)
+    else:
+        raise NotImplementedError    
+    
+    for metric_field in metric_fields:  # dataclasses.fields(BinaryEvalMetrics):
         metric_values = [getattr(task_metrics, metric_field.name) for task_metrics in results]
         aggregated_metrics[metric_field.name] = (np.mean(metric_values), np.std(metric_values))
 
