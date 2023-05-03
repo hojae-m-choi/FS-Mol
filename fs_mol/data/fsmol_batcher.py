@@ -127,6 +127,7 @@ class FSMolBatcher(Generic[BatchFeatureType, BatchLabelType]):
         finalizer_callback: Optional[
             Callable[[Dict[str, Any]], Tuple[BatchFeatureType, BatchLabelType]]
         ] = None,
+        regression_task: bool = False
     ):
         if not (
             max_num_graphs is not None or max_num_nodes is not None or max_num_edges is not None
@@ -142,6 +143,7 @@ class FSMolBatcher(Generic[BatchFeatureType, BatchLabelType]):
         self._init_callback = init_callback
         self._per_datapoint_callback = per_datapoint_callback
         self._finalizer_callback = finalizer_callback
+        self.regression_task = regression_task
 
     def __init_batch(self) -> Dict[str, Any]:
         batch_data = {
@@ -169,8 +171,12 @@ class FSMolBatcher(Generic[BatchFeatureType, BatchLabelType]):
             return self._finalizer_callback(batch_data)
 
         batch_features = fsmol_batch_finalizer(batch_data)
-        return batch_features, np.stack(batch_data["bool_labels"], axis=0)
-
+        if self.regression_task:
+            labels = np.stack(batch_data["numeric_labels"], axis=0)
+        else:
+            labels = np.stack(batch_data["bool_labels"], axis=0)
+        return batch_features, labels
+    
     def batch(
         self, datapoints: Iterable[MoleculeDatapoint]
     ) -> Iterator[Tuple[BatchFeatureType, BatchLabelType]]:

@@ -43,6 +43,7 @@ def validate_by_finetuning_on_tasks(
     dataset: FSMolDataset,
     learning_rate: float,
     task_specific_learning_rate: float,
+    regression_task: bool = False,
     batch_size: int = 128,
     metric_to_use: MetricType = "avg_precision",
     seed: int = 0,
@@ -66,7 +67,8 @@ def validate_by_finetuning_on_tasks(
                 model_cls=GNNMultitaskModel,
                 task_sample=task_sample,
                 batcher=get_multitask_inference_batcher(
-                    max_num_graphs=batch_size, device=model_device
+                    max_num_graphs=batch_size, device=model_device,
+                    regression_task=regression_task,
                 ),
                 learning_rate=learning_rate,
                 task_specific_learning_rate=task_specific_learning_rate,
@@ -79,7 +81,7 @@ def validate_by_finetuning_on_tasks(
         task_to_results = eval_model(
             test_model_fn=test_model_fn,
             dataset=dataset,
-            train_set_sample_sizes=[16, 128],
+            train_set_sample_sizes=[16,],  # [16, 128],
             num_samples=3,
             valid_size_or_ratio=0.2,
             test_size_or_ratio=512,
@@ -94,7 +96,7 @@ def validate_by_finetuning_on_tasks(
 
         model = model.to(model_device)
 
-        return mean_metrics[metric_to_use][0]
+        return mean_metrics[metric_to_use][0]  # 0: mean, 1: stdev
 
 
 def add_model_arguments(parser: argparse.ArgumentParser):
@@ -109,6 +111,7 @@ def make_model_from_args(
         graph_feature_extractor_config=make_graph_feature_extractor_config_from_args(args),
         num_tasks=num_tasks,
         num_tail_layers=args.num_tail_layers,
+        label_type='regression' if args.regression_task else 'classification',
     )
     model = create_model(model_config, device=device)
     return model
@@ -136,6 +139,7 @@ def add_train_loop_arguments(parser: argparse.ArgumentParser):
             "roc_auc",
             "avg_precision",
             "kappa",
+            "rmse"
         ],
         default="avg_precision",
         help="Metric to evaluate on validation data.",
@@ -166,7 +170,7 @@ def main():
         default=1.0,
         help="Scaling factor for LRs used in finetuning eval.",
     )
-
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     args = parser.parse_args()
 
     out_dir, fsmol_dataset, aml_run = set_up_train_run("Multitask", args, torch=True)
@@ -201,6 +205,7 @@ def main():
         dataset=fsmol_dataset,
         learning_rate=args.finetune_lr_scale * args.learning_rate,
         task_specific_learning_rate=args.finetune_lr_scale * task_specific_lr,
+        regression_task=args.regression_task,
         batch_size=args.batch_size,
         metric_to_use=args.metric_to_use,
         seed=args.seed,
@@ -217,6 +222,7 @@ def main():
             task_name_to_id=train_task_name_to_id,
             max_num_graphs=args.batch_size,
             device=device,
+            regression_task=args.regression_task,
         ),
         valid_fn=valid_fn,
         metric_to_use=args.metric_to_use,

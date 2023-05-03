@@ -58,7 +58,7 @@ def parse_command_line():
         default=0.0001,
         help="Learning rate for shared model components.",
     )
-
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     return parser.parse_args()
 
 
@@ -84,7 +84,11 @@ def main():
             model_weights_file,
             model_cls=GNNMultitaskModel,
             task_sample=task_sample,
-            batcher=get_multitask_inference_batcher(max_num_graphs=args.batch_size, device=device),
+            batcher=get_multitask_inference_batcher(
+                max_num_graphs=args.batch_size, 
+                device=device,
+                regression_task=args.regression_task,
+                ),
             learning_rate=args.learning_rate,
             task_specific_learning_rate=args.task_specific_lr,
             metric_to_use="avg_precision",

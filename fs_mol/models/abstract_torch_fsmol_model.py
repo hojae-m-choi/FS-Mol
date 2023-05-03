@@ -50,9 +50,12 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class TorchFSMolModelOutput:  # TODO: regression label
     # Predictions for each input molecule, as a [NUM_MOLECULES, 1] float tensor
-    molecule_binary_label: torch.Tensor
-    molecule_regression_label: torch.Tensor
+    molecule_label: torch.Tensor
+    label_type: str = 'classification'
 
+    @property
+    def is_regression_task(self):
+        return bool( self.label_type == 'regression' )
 
 @dataclass
 class TorchFSMolModelLoss:
@@ -77,9 +80,15 @@ ModelStateType = Dict[str, Any]
 class AbstractTorchFSMolModel(
     Generic[BatchFeaturesType, BatchOutputType, BatchLossType], torch.nn.Module
 ):
-    def __init__(self):
+    def __init__(self, label_type='classification'):
         super().__init__()
-        self.criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
+        self.label_type = label_type
+        if label_type == 'classification':
+            self.criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
+        elif label_type == 'regression':
+            self.criterion = torch.nn.MSELoss(reduction="none")
+        else:
+            raise KeyError
 
     @abstractmethod
     def forward(self, batch: BatchFeaturesType) -> BatchOutputType:
@@ -91,7 +100,7 @@ class AbstractTorchFSMolModel(
             batch: representation of the features of NUM_MOLECULES, as chosen by the implementor.
 
         Returns:
-            Model output, a subtype of TorchFSMolModelOutput, ensuring that at least molecule_binary_label
+            Model output, a subtype of TorchFSMolModelOutput, ensuring that at least molecule_label
             is present.
         """
         raise NotImplementedError()
@@ -110,7 +119,9 @@ class AbstractTorchFSMolModel(
         Returns:
             Dictionary mapping partial loss names to the loss. Optimization will be performed over the sum of values.
         """
-        predictions = model_output.molecule_binary_label.squeeze(dim=-1)
+        predictions = model_output.molecule_label.squeeze(dim=-1)
+        if self.label_type != model_output.label_type:
+            raise TypeError
         label_loss = torch.mean(self.criterion(predictions, labels.float()))
         return TorchFSMolModelLoss(label_loss=label_loss)
 
@@ -318,13 +329,16 @@ def run_on_data_iterable(
 
         # Apply sigmoid to have predictions in appropriate range for computing (scikit) scores.
         num_samples = labels.shape[0]
-        predicted_labels = torch.sigmoid(predictions.molecule_binary_label).detach().cpu()  #TODO: if in regression task, prediction should be inverse transformed.
+        if predictions.is_regression_task:
+            predicted_labels = predictions.molecule_label.detach().cpu() #TODO: if in regression task, prediction should be inverse transformed.
+        else:
+            predicted_labels = torch.sigmoid(predictions.molecule_label).detach().cpu()  
         for i in range(num_samples):
             task_id = sample_to_task_id[i].item()
             per_task_preds[task_id].append(predicted_labels[i].item())
             per_task_labels[task_id].append(labels[i].item())
 
-    metrics = compute_metrics(per_task_preds, per_task_labels)
+    metrics = compute_metrics(per_task_preds, per_task_labels, label_type=predictions.label_type)
 
     return metric_logger.get_mean_metric_value("total_loss"), metrics
 
@@ -342,11 +356,11 @@ def validate_on_data_iterable(
     )
     if not quiet:
         logger.info(f"  Validation loss: {valid_loss:.5f}")
-    # If our data_iterable had more than one task, we'll have one result per task - average them:
-    mean_valid_metrics = avg_task_metrics_list(list(valid_metrics.values()))
     if metric_to_use == "loss":
         return -valid_loss  # We are maximising things elsewhere, so flip the sign on the loss
     else:
+        # If our data_iterable had more than one task, we'll have one result per task - average them:
+        mean_valid_metrics = avg_task_metrics_list(list(valid_metrics.values()))
         return mean_valid_metrics[metric_to_use][0]
 
 
@@ -394,7 +408,8 @@ def train_loop(
         logger.log(log_level, f"  = Validation")
         valid_metric = valid_fn(model)
         logger.log(log_level, f"  Validation metric: {valid_metric:.5f}")
-
+        
+        # early stopping
         if valid_metric > best_valid_metric:
             logger.log(
                 log_level,

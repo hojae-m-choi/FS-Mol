@@ -48,15 +48,20 @@ def multitask_batcher_add_sample_fn(
 
 
 def multitask_batcher_finalizer_fn(
-    batch_data: Dict[str, Any]
+    batch_data: Dict[str, Any],
+    regression_task: bool = False,
 ) -> Tuple[FSMolMultitaskBatch, np.ndarray]:
     plain_batch = fsmol_batch_finalizer(batch_data)
+    if regression_task:
+        labels = np.stack(batch_data["numeric_labels"], axis=0)
+    else:    
+        labels = np.stack(batch_data["bool_labels"], axis=0)
     return (
         FSMolMultitaskBatch(
             sample_to_task_id=np.stack(batch_data["sample_to_task_id"], axis=0),
             **dataclasses.asdict(plain_batch),
         ),
-        np.stack(batch_data["bool_labels"], axis=0),
+        labels,
     )
 
 
@@ -66,9 +71,10 @@ def get_multitask_batcher(
     max_num_nodes: Optional[int] = None,
     max_num_edges: Optional[int] = None,
     device: Optional[torch.device] = None,
+    regression_task: bool = False,
 ) -> FSMolBatcher[FSMolMultitaskBatch, np.ndarray]:
     def finalizer(batch_data: Dict[str, Any]):
-        finalized_batch = multitask_batcher_finalizer_fn(batch_data)
+        finalized_batch = multitask_batcher_finalizer_fn(batch_data, regression_task=regression_task)
         if device is not None:
             finalized_batch = torchify(finalized_batch, device)
 
@@ -83,12 +89,14 @@ def get_multitask_batcher(
             multitask_batcher_add_sample_fn, task_name_to_id=task_name_to_id
         ),
         finalizer_callback=finalizer,
+        regression_task=regression_task,
     )
 
 
 def get_multitask_inference_batcher(
     max_num_graphs: int,
     device: torch.device,
+    regression_task: bool = False,
 ) -> FSMolBatcher[FSMolMultitaskBatch, np.ndarray]:
     # In this setting, we only consider a single task at a time, so they just all get the same ID:
     task_name_to_const_id: Dict[str, int] = defaultdict(lambda: 0)
@@ -96,6 +104,7 @@ def get_multitask_inference_batcher(
         task_name_to_id=task_name_to_const_id,
         max_num_graphs=max_num_graphs,
         device=device,
+        regression_task=regression_task,
     )
 
 
@@ -111,13 +120,15 @@ class MultitaskTaskSampleBatchIterable(Iterable[Tuple[FSMolMultitaskBatch, torch
         max_num_edges: Optional[int] = None,
         num_chunked_tasks: int = 8,
         repeat: bool = False,
+        regression_task: bool = False,
     ):
         self._dataset = dataset
         self._data_fold = data_fold
         self._num_chunked_tasks = num_chunked_tasks
         self._repeat = repeat
         self._device = device
-
+        self.regression_task = regression_task
+        
         self._task_sampler = RandomTaskSampler(
             train_size_or_ratio=1024, valid_size_or_ratio=0, test_size_or_ratio=0
         )
@@ -126,6 +137,7 @@ class MultitaskTaskSampleBatchIterable(Iterable[Tuple[FSMolMultitaskBatch, torch
             max_num_graphs=max_num_graphs,
             max_num_nodes=max_num_nodes,
             max_num_edges=max_num_edges,
+            regression_task=regression_task,
         )
 
     def __iter__(self) -> Iterator[Tuple[FSMolMultitaskBatch, torch.Tensor]]:

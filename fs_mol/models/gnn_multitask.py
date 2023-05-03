@@ -29,6 +29,7 @@ class GNNMultitaskConfig:
     graph_feature_extractor_config: GraphFeatureExtractorConfig
     num_tasks: int
     num_tail_layers: int = 1
+    label_type: str = 'classification'
 
 
 def add_gnn_multitask_model_arguments(parser: argparse.ArgumentParser):
@@ -51,7 +52,7 @@ class GNNMultitaskModel(
     AbstractTorchFSMolModel[FSMolMultitaskBatch, TorchFSMolModelOutput, TorchFSMolModelLoss]
 ):
     def __init__(self, config: GNNMultitaskConfig):
-        super().__init__()
+        super().__init__(label_type=config.label_type)
         self.config = config
         self.device = torch.device("cpu")  # Default, we'll override where appropriate
 
@@ -86,7 +87,7 @@ class GNNMultitaskModel(
         mol_representations = self.graph_feature_extractor(batch)
         mol_predictions = self.tail_mlp(mol_representations)
         mol_predictions = torch.gather(mol_predictions, 1, batch.sample_to_task_id.unsqueeze(-1))
-        return TorchFSMolModelOutput(molecule_binary_label=mol_predictions)
+        return TorchFSMolModelOutput(molecule_label=mol_predictions, label_type=self.label_type)
 
     def get_model_state(self) -> Dict[str, Any]:
         return {
