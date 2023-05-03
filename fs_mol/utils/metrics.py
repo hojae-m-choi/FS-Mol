@@ -13,7 +13,6 @@ from sklearn.metrics import (
     roc_auc_score,
     average_precision_score,
     cohen_kappa_score,
-    matthews_corrcoef,
     mean_absolute_error,
     mean_squared_error,
     max_error,
@@ -25,7 +24,7 @@ from scipy.stats import (
     kendalltau
 )
 
-
+    
 @dataclass(frozen=True)
 class BinaryEvalMetrics:
     size: int
@@ -75,13 +74,12 @@ class RegressionEvalMetrics:
     pcc: float  # pearson correlation
     ci: float  # c statistics ( concordance index )
     scc: float  # spearman correlation
-    mcc: float
     r2: float
     tau: float
 
 
 RegressionMetricType = Literal[
-    "mae", "rmse", "mxe", "pcc", "ci", "scc", "mcc", "r2", "tau"
+    "mae", "rmse", "mxe", "pcc", "ci", "scc", "r2", "tau"
 ]
 
 
@@ -93,12 +91,11 @@ def compute_regression_task_metrics(predictions: List[float], labels: List[float
         mae=mean_absolute_error(labels, predictions),
         rmse=np.sqrt(mean_squared_error(labels, predictions)),
         mxe=max_error(labels, predictions),
-        pcc=pearsonr(labels, predictions),
-        ci=(kendalltau(labels, predictions).statistic+1)/2,
-        scc=spearmanr(labels, predictions),
-        mcc=matthews_corrcoef(labels, predictions),
+        pcc=pearsonr(labels, predictions)[0],
+        ci=(kendalltau(labels, predictions).correlation+1)/2, # 'correlation' for scipy==1.7.3, but 'statistic' for scipy==1.10.1
+        scc=spearmanr(labels, predictions).correlation,
         r2=r2_score(labels, predictions),
-        tau=kendalltau(labels, predictions)
+        tau=kendalltau(labels, predictions).correlation
     )
 
 
@@ -139,10 +136,18 @@ def avg_task_metrics_list(
 def compute_metrics(
     task_to_predictions: Dict[int, List[float]],
     task_to_labels: Dict[int, List[float]],
+    label_type: str = 'classification',
 ) -> Dict[int, BinaryEvalMetrics]:
+    if label_type == 'classification':
+        compute_task_metrics_fn = compute_binary_task_metrics
+    elif label_type == 'regression':
+        compute_task_metrics_fn = compute_regression_task_metrics
+    else:
+        raise NotImplementedError
+    
     per_task_results: Dict[int, BinaryEvalMetrics] = {}
     for task_id in task_to_predictions.keys():
-        per_task_results[task_id] = compute_binary_task_metrics(
+        per_task_results[task_id] = compute_task_metrics_fn(
             task_to_predictions[task_id], labels=task_to_labels[task_id]
         )
 

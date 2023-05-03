@@ -21,14 +21,14 @@ from fs_mol.data.fsmol_task_sampler import (
 )
 from fs_mol.utils.cli_utils import set_seed
 from fs_mol.utils.logging import prefix_log_msgs, set_up_logging
-from fs_mol.utils.metrics import BinaryEvalMetrics
+from fs_mol.utils.metrics import BinaryEvalMetrics, RegressionEvalMetrics
 
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class FSMolTaskSampleEvalResults(BinaryEvalMetrics):
+class FSMolTaskSampleEvalResults:
     task_name: str
     seed: int
     num_train: int
@@ -36,6 +36,13 @@ class FSMolTaskSampleEvalResults(BinaryEvalMetrics):
     fraction_pos_train: float
     fraction_pos_test: float
 
+@dataclass(frozen=True)
+class FSMolBinTaskSampleEvalResults(BinaryEvalMetrics, FSMolTaskSampleEvalResults):
+    pass
+
+@dataclass(frozen=True)
+class FSMolRegTaskSampleEvalResults(RegressionEvalMetrics, FSMolTaskSampleEvalResults):
+    pass
 
 def add_data_cli_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -123,47 +130,90 @@ def set_up_test_run(
 
 
 def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
-    with open(output_csv_file, "w", newline="") as csv_file:
-        fieldnames = [
-            "num_train_requested",
-            "num_train",
-            "fraction_positive_train",
-            "num_test",
-            "fraction_positive_test",
-            "seed",
-            "valid_score",
-            "average_precision_score",
-            "roc_auc",
-            "acc",
-            "balanced_acc",
-            "precision",
-            "recall",
-            "f1_score",
-            "delta_auprc",
-        ]
-        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-        csv_writer.writeheader()
+    if isinstance(test_results[0], FSMolRegTaskSampleEvalResults):
+        with open(output_csv_file, "w", newline="") as csv_file:
+            fieldnames = [
+                "num_train_requested",
+                "num_train",
+                "fraction_positive_train",
+                "num_test",
+                "fraction_positive_test",
+                "seed",
+                "valid_score",
+                'mean_absolute_error', 
+                'root_mean_squared_error', 
+                'max_error', 
+                'pearson_corr', 
+                'concordance_index', 
+                'spearman_corr', 
+                'r_squared', 
+                'kendall_tau'
+            ]
+            csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            csv_writer.writeheader()
 
-        for test_result in test_results:
-            csv_writer.writerow(
-                {
-                    "num_train_requested": test_result.num_train,
-                    "num_train": test_result.num_train,
-                    "num_test": test_result.num_test,
-                    "fraction_positive_train": test_result.fraction_pos_train,
-                    "fraction_positive_test": test_result.fraction_pos_test,
-                    "seed": test_result.seed,
-                    "average_precision_score": test_result.avg_precision,
-                    "roc_auc": test_result.roc_auc,
-                    "acc": test_result.acc,
-                    "balanced_acc": test_result.balanced_acc,
-                    "precision": test_result.prec,
-                    "recall": test_result.recall,
-                    "f1_score": test_result.f1,
-                    "delta_auprc": test_result.avg_precision - test_result.fraction_pos_test,
-                }
-            )
+            for test_result in test_results:
+                csv_writer.writerow(
+                    {
+                        "num_train_requested": test_result.num_train,
+                        "num_train": test_result.num_train,
+                        "fraction_positive_train": test_result.fraction_pos_train,
+                        "num_test": test_result.num_test,
+                        "fraction_positive_test": test_result.fraction_pos_test,
+                        "seed": test_result.seed,
+                        "mean_absolute_error": test_result.mae,
+                        "root_mean_squared_error": test_result.rmse,
+                        "max_error": test_result.mxe,
+                        "pearson_corr": test_result.pcc,
+                        "concordance_index": test_result.ci,
+                        "spearman_corr": test_result.scc,
+                        "r_squared": test_result.r2,
+                        "kendall_tau": test_result.tau,
+                    }
+                )
+    elif isinstance(test_results[0], FSMolBinTaskSampleEvalResults):
+        with open(output_csv_file, "w", newline="") as csv_file:
+            fieldnames = [
+                "num_train_requested",
+                "num_train",
+                "fraction_positive_train",
+                "num_test",
+                "fraction_positive_test",
+                "seed",
+                "valid_score",
+                "average_precision_score",
+                "roc_auc",
+                "acc",
+                "balanced_acc",
+                "precision",
+                "recall",
+                "f1_score",
+                "delta_auprc",
+            ]
+            csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            csv_writer.writeheader()
 
+            for test_result in test_results:
+                csv_writer.writerow(
+                    {
+                        "num_train_requested": test_result.num_train,
+                        "num_train": test_result.num_train,
+                        "fraction_positive_train": test_result.fraction_pos_train,
+                        "num_test": test_result.num_test,
+                        "fraction_positive_test": test_result.fraction_pos_test,
+                        "seed": test_result.seed,
+                        "average_precision_score": test_result.avg_precision,
+                        "roc_auc": test_result.roc_auc,
+                        "acc": test_result.acc,
+                        "balanced_acc": test_result.balanced_acc,
+                        "precision": test_result.prec,
+                        "recall": test_result.recall,
+                        "f1_score": test_result.f1,
+                        "delta_auprc": test_result.avg_precision - test_result.fraction_pos_test,
+                    }
+                )
+    else:
+        raise NotImplementedError
 
 def eval_model(
     test_model_fn: Callable[[FSMolTaskSample, str, int], BinaryEvalMetrics],
@@ -232,9 +282,16 @@ def eval_model(
                         continue
 
                     test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
-
+                    
+                    if isinstance(test_metrics, RegressionEvalMetrics):
+                        eval_results_cls = FSMolRegTaskSampleEvalResults
+                    elif isinstance(test_metrics, BinaryEvalMetrics):
+                        eval_results_cls = FSMolBinTaskSampleEvalResults
+                    else:
+                        raise NotImplementedError
+                        
                     test_results.append(
-                        FSMolTaskSampleEvalResults(
+                        eval_results_cls(
                             task_name=task.name,
                             seed=local_seed,
                             num_train=train_size,
