@@ -9,25 +9,26 @@ dependencies:
   - pip=20.1.1 # See https://github.com/Azure/MachineLearningNotebooks/issues/1110 - using this specific pip works around ruamel.yaml not found error.
   - rdkit==2020.09.1.0
   - matplotlib
-  - numpy==1.19.2
-  - scikit-learn
   - pandas
   - seaborn
   - tqdm
   - typing-extensions
   - pytorch=1.10.0=py3.7_cuda11.3_cudnn8.2.0_0
   - pip:
-      - docopt
-      - dpu-utils>=0.2.13
-      - tensorflow>=2.4
-      - tf2-gnn~=2.12.0
-      - more-itertools
-      - mysql-connector-python==8.0.17
-      - pyprojroot
-      - py-repo-root~=1.1.1
-      # torch-scatter and friends:
-      - -f https://pytorch-geometric.com/whl/torch-1.10.0+cu113.html
-      - torch-scatter
-      - xlsxwriter
-      - autorank
-      - azureml-core
+    - docopt
+    - dpu-utils>=0.2.13
+    - numpy~=1.19.2 # 1.19.5 -> 1.21.6
+    - scikit-learn
+    - scikit-learn-intelex
+    - tensorflow>=2.4
+    - tf2-gnn~=2.12.0
+    - more-itertools
+    - mysql-connector-python==8.0.17
+    - pyprojroot
+    - py-repo-root~=1.1.1
+    # torch-scatter and friends:
+    - -f https://pytorch-geometric.com/whl/torch-1.10.0+cu113.html
+    - torch-scatter
+    - xlsxwriter
+    - autorank
+    - azureml-core
