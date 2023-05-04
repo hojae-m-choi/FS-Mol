@@ -42,7 +42,8 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         super_params.update(these_hypers)
         return super_params
 
-    def __init__(self, params: Dict[str, Any], dataset: GraphDataset, name: str = None):
+    def __init__(self, params: Dict[str, Any], dataset: GraphDataset, name: str = None,
+                 label_type: str = 'classification'):
         super().__init__(params, dataset=dataset, name=name)
         self._initial_emb_lr = params["initial_emb_lr"]
         self._gnn_lr = params["gnn_lr"]
@@ -51,6 +52,7 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         self._use_loss_class_weights = params["use_loss_class_weights"]
 
         self._initial_optimizer_states: Optional[Dict[str, List[tf.Tensor]]] = None
+        self.label_type = label_type
 
     def build(self, input_shapes: Dict[str, Any]):
         super().build(input_shapes)

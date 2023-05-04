@@ -16,12 +16,17 @@ from fs_mol.data.maml import TFGraphBatchIterable
 from fs_mol.models.metalearning_graph_binary_classification import (
     MetalearningGraphBinaryClassificationTask,
 )
+from fs_mol.models.metalearning_graph_regression import (
+    MetalearningGraphRegressionTask,
+)    
 from fs_mol.utils.logging import PROGRESS_LOG_LEVEL, restrict_console_log_level
 from fs_mol.utils.metrics import (
     BinaryEvalMetrics,
+    RegressionEvalMetrics,
     BinaryMetricType,
     avg_metrics_over_tasks,
     compute_binary_task_metrics,
+    compute_regression_task_metrics,
 )
 from fs_mol.utils.test_utils import eval_model
 
@@ -34,7 +39,7 @@ MetricType = Union[BinaryMetricType, Literal["loss"]]
 
 def save_model(
     save_file: str,
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     extra_data_to_store: Dict[str, Any] = {},
     quiet: bool = True,
 ) -> None:
@@ -58,18 +63,27 @@ def save_model(
         logger.info(f" Stored model metadata and weights to {pkl_file}.")
 
 
-def __metrics_from_batch_results(task_results: List[Dict[str, Any]]):
+def __metrics_from_batch_results(task_results: List[Dict[str, Any]],
+                                 label_type:str = 'classification'):
     predictions, labels = [], []
     for task_result in task_results:
         predictions.append(task_result["predictions"].numpy())
         labels.append(task_result["labels"])
-    return compute_binary_task_metrics(
-        predictions=np.concatenate(predictions, axis=0), labels=np.concatenate(labels, axis=0)
-    )
+        
+    if label_type == 'classification':
+        compute_task_metrics_fn = compute_binary_task_metrics
+    elif label_type == 'regression':
+        compute_task_metrics_fn = compute_regression_task_metrics
+    else:
+        raise NotImplementedError
+    
+    return compute_task_metrics_fn(
+            predictions=np.concatenate(predictions, axis=0), labels=np.concatenate(labels, axis=0)
+            )
 
 
 def train_loop(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     train_data: Iterable[Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]],
     valid_fn: Callable[[MetalearningGraphBinaryClassificationTask], float],
     model_save_file: str,
@@ -89,7 +103,7 @@ def train_loop(
         logger.info(f"== Epoch {epoch}")
         logger.info(f"  = Training")
         train_loss, _, train_results = model.run_one_epoch(train_data, training=True, quiet=True)
-        train_epoch_metrics = __metrics_from_batch_results(train_results)
+        train_epoch_metrics = __metrics_from_batch_results(train_results, label_type=model.label_type)
         if metric_to_use == "loss":
             mean_train_metric = -train_loss
         else:
@@ -119,13 +133,13 @@ def train_loop(
 
 
 def validate_on_data_iterable(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     data_iterable: Iterable[Tuple[Dict[str, tf.Tensor], Dict[str, tf.Tensor]]],
     metric_to_use: MetricType = "avg_precision",
     quiet: bool = False,
 ) -> float:
     valid_loss, _, valid_results = model.run_one_epoch(data_iterable, training=False, quiet=quiet)
-    valid_metrics = __metrics_from_batch_results(valid_results)
+    valid_metrics = __metrics_from_batch_results(valid_results, label_type=model.label_type)
     logger.info(f"  Validation loss: {valid_loss:.5f}")
     if metric_to_use == "loss":
         return -valid_loss  # We are maximising things, so flip the sign on the loss
@@ -134,7 +148,7 @@ def validate_on_data_iterable(
 
 
 def eval_model_by_finetuning_on_task(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     model_weights: Dict[str, tf.Tensor],
     task_sample: FSMolTaskSample,
     temp_out_folder: str,
@@ -155,16 +169,24 @@ def eval_model_by_finetuning_on_task(
             model_var_name = var.name
         var.assign(model_weights[model_var_name])
     model.reset_optimizer_state_to_initial()
+    if model.label_type == 'classification':
+        regression_task = False
+    elif model.label_type == 'regression':
+        regression_task = True
+    else:
+        raise NotImplementedError
     with restrict_console_log_level(logging.WARN):
         best_valid_metric = train_loop(
             model=model,
             train_data=TFGraphBatchIterable(
-                samples=task_sample.train_samples, max_num_nodes=max_num_nodes_in_batch
+                samples=task_sample.train_samples, max_num_nodes=max_num_nodes_in_batch,
+                regression_task=regression_task
             ),
             valid_fn=partial(
                 validate_on_data_iterable,
                 data_iterable=TFGraphBatchIterable(
-                    samples=task_sample.valid_samples, max_num_nodes=max_num_nodes_in_batch
+                    samples=task_sample.valid_samples, max_num_nodes=max_num_nodes_in_batch,
+                    regression_task=regression_task
                 ),
                 metric_to_use="loss",
                 quiet=True,
@@ -182,12 +204,13 @@ def eval_model_by_finetuning_on_task(
 
     test_loss, _, test_model_results = model.run_one_epoch(
         TFGraphBatchIterable(
-            samples=task_sample.test_samples, max_num_nodes=max_num_nodes_in_batch
+            samples=task_sample.test_samples, max_num_nodes=max_num_nodes_in_batch,
+            regression_task=regression_task,
         ),
         training=False,
         quiet=quiet,
     )
-    test_metrics = __metrics_from_batch_results(test_model_results)
+    test_metrics = __metrics_from_batch_results(test_model_results, label_type=model.label_type)
     logger.log(PROGRESS_LOG_LEVEL, f" Test loss:                   {float(test_loss):.5f}")
     logger.log(PROGRESS_LOG_LEVEL, f" Test metrics: {test_metrics}")
 
@@ -200,7 +223,7 @@ def eval_model_by_finetuning_on_task(
 
 
 def eval_model_by_finetuning_on_tasks(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     model_weights: Dict[str, tf.Tensor],
     dataset: FSMolDataset,
     max_num_nodes_in_batch: int,

@@ -4,10 +4,10 @@ import numpy as np
 import sklearn.metrics as metrics
 import tensorflow as tf
 from tf2_gnn.data import GraphDataset
-from tf2_gnn.models import GraphBinaryClassificationTask
+from tf2_gnn.models import GraphRegressionTask
 from tf2_gnn.utils.polynomial_warmup_and_decay_schedule import PolynomialWarmupAndDecaySchedule
 
-from fs_mol.utils.metrics import BinaryEvalMetrics, compute_binary_task_metrics
+from fs_mol.utils.metrics import RegressionEvalMetrics, compute_regression_task_metrics
 
 
 SMALL_NUMBER = 1e-7
@@ -21,9 +21,12 @@ class NoCachedStateError(Exception):
         return f"No cached state exists, model has not yet been built."
 
 
-class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
+class MetalearningGraphRegressionTask(GraphRegressionTask):
     @classmethod
     def get_default_hyperparameters(cls, mp_style: Optional[str] = None) -> Dict[str, Any]:
+        """
+            mp_style: message passing style for GNN in tf2_gnn/layers/gnn.py
+        """
         super_params = super().get_default_hyperparameters(mp_style)
         these_hypers: Dict[str, Any] = {
             "optimizer": "adam",  # change to "sgd" for maml as this addresses the inner loop
@@ -42,15 +45,16 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         super_params.update(these_hypers)
         return super_params
 
-    def __init__(self, params: Dict[str, Any], dataset: GraphDataset, name: str = None):
+    def __init__(self, params: Dict[str, Any], dataset: GraphDataset, name: str = None,
+                 label_type: str = 'regression'):
         super().__init__(params, dataset=dataset, name=name)
         self._initial_emb_lr = params["initial_emb_lr"]
         self._gnn_lr = params["gnn_lr"]
         self._readout_lr = params["readout_lr"]
         self._final_mlp_lr = params["final_mlp_lr"]
-        self._use_loss_class_weights = params["use_loss_class_weights"]
 
         self._initial_optimizer_states: Optional[Dict[str, List[tf.Tensor]]] = None
+        self.label_type = label_type
 
     def build(self, input_shapes: Dict[str, Any]):
         super().build(input_shapes)
@@ -203,17 +207,17 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
             learning_rate = self._params["learning_rate"]
 
         if optimizer_name == "sgd":
-            optimizer = tf.keras.optimizers.SGD(
+            optimizer = tf.keras.optimizers.legacy.SGD(
                 learning_rate=learning_rate, momentum=self._params["momentum"]
             )
         elif optimizer_name == "rmsprop":
-            optimizer = tf.keras.optimizers.RMSprop(
+            optimizer = tf.keras.optimizers.legacy.RMSprop(
                 learning_rate=learning_rate,
                 momentum=self._params["momentum"],
                 rho=self._params["rmsprop_rho"],
             )
         elif optimizer_name == "adam":
-            optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+            optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=learning_rate)
         else:
             raise Exception('Unknown optimizer "%s".' % (self._params["optimizer"]))
 
@@ -222,7 +226,9 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         _ = optimizer.iterations
         optimizer._create_hypers()
         optimizer._create_slots(self.trainable_variables)
-
+        # this above 3 lines can be substitute with 
+        # `optimizer._create_all_weights(self.trainable_variables)`
+        
         return optimizer
 
     def compute_task_metrics(
@@ -232,31 +238,16 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         batch_labels: Dict[str, tf.Tensor],
     ) -> Dict[str, tf.Tensor]:
 
-        ce_per_sample = tf.keras.losses.binary_crossentropy(
+        mse_per_sample = tf.keras.losses.mean_squared_error(  # TODO: invert TF -> torch
             y_true=tf.expand_dims(batch_labels["target_value"], -1),
             y_pred=tf.expand_dims(task_output, -1),
-            from_logits=False,
         )
 
-        if self._use_loss_class_weights:
-            # We want to do class weighting but are too lazy to compute full dataset statistics (and
-            # also know that in most cases, we only have a single batch anyway). Hence, compute per-batch
-            # label stats:
-            num_labels = tf.cast(tf.shape(batch_labels["target_value"])[0], tf.float32)
-            sample_has_pos_label = tf.math.greater(batch_labels["target_value"], 0.0)
-            num_pos_batch_labels = tf.reduce_sum(tf.cast(sample_has_pos_label, tf.float32))
-            num_neg_batch_labels = num_labels - num_pos_batch_labels
-
-            pos_label_weight = num_labels / (2.0 * num_pos_batch_labels + SMALL_NUMBER)
-            neg_label_weight = num_labels / (2.0 * num_neg_batch_labels + SMALL_NUMBER)
-            sample_weights = tf.where(sample_has_pos_label, pos_label_weight, neg_label_weight)
-            ce = tf.reduce_mean(ce_per_sample * sample_weights)
-        else:
-            ce = tf.reduce_mean(ce_per_sample)
+        mse = tf.reduce_mean(mse_per_sample)
 
         num_graphs = tf.cast(batch_features["num_graphs_in_batch"], tf.float32)
         return {
-            "loss": ce,
+            "loss": mse,
             "num_graphs": num_graphs,
             # We store the entirety of labels/results to enable more metric computations:
             "labels": batch_labels["target_value"],
@@ -271,8 +262,8 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
         predictions = tf.concat(predictions, axis=0).numpy()
         labels = tf.concat(labels, axis=0).numpy()
 
-        average_precision = metrics.average_precision_score(y_true=labels, y_score=predictions)
-        return -average_precision, f"Average Precision = {average_precision:.3f}"
+        epoch_mae = metrics.mean_absolute_error(y_true=labels, y_score=predictions)
+        return -epoch_mae, f"Mean Absolute Error = {epoch_mae:.3f}"
 
     def _initialize_optimizers(
         self,
@@ -332,11 +323,11 @@ class MetalearningGraphBinaryClassificationTask(GraphBinaryClassificationTask):
                 )
                 setattr(self, f"_{opt_name}", optimizer)
 
-    def evaluate_model(self, dataset: tf.data.Dataset) -> BinaryEvalMetrics:
+    def evaluate_model(self, dataset: tf.data.Dataset) -> RegressionEvalMetrics:
         predictions = self.predict(dataset).numpy()
         labels = []
         for _, batch_labels in dataset:
             labels.append(batch_labels["target_value"])
-        return compute_binary_task_metrics(
+        return compute_regression_task_metrics(
             predictions=predictions, labels=np.concatenate(labels, axis=0)
         )
