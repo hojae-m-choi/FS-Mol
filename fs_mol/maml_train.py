@@ -9,7 +9,7 @@ import sys
 import time
 from functools import reduce, partial
 from pathlib import Path
-from typing import Iterable, List, Tuple, Dict, Optional
+from typing import Iterable, List, Tuple, Dict, Optional, Union
 from typing_extensions import Protocol
 
 import tensorflow as tf
@@ -35,6 +35,9 @@ from fs_mol.data.fsmol_task_sampler import SamplingException
 from fs_mol.data.maml import FSMolStubGraphDataset, TFGraphBatchIterable
 from fs_mol.models.metalearning_graph_binary_classification import (
     MetalearningGraphBinaryClassificationTask,
+)
+from fs_mol.models.metalearning_graph_regression import (
+    MetalearningGraphRegressionTask,
 )
 from fs_mol.utils.cli_utils import add_train_cli_args, set_up_train_run, str2bool
 from fs_mol.utils.logging import FileLikeLogger, PROGRESS_LOG_LEVEL
@@ -81,12 +84,13 @@ class MetatrainValidationCallback(Protocol):
 
 
 def metatrain_on_task_samples(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     task_samples: List[FSMolTaskSample],
     max_num_nodes_in_batch: int,
     max_num_inner_train_steps: int = 1,
     metatrain_task_specific_parameters: bool = True,
     quiet: bool = False,
+    regression_task: str = False,
 ) -> Tuple[float, int]:
     # We make a copy of the current state of the model (at the beginning of an outer/meta
     # training step). Below, we will start finetuning for specific tasks from this state,
@@ -114,6 +118,7 @@ def metatrain_on_task_samples(
                 samples=task_sample.train_samples,
                 shuffle=True,
                 max_num_nodes=max_num_nodes_in_batch,
+                regression_task=regression_task,
             )
             for train_features, train_labels in train_data:
                 # Only do steps as long as we are still under the limit; otherwise just drain the iterator:
@@ -131,7 +136,8 @@ def metatrain_on_task_samples(
 
         # Next, we do the meta-update using the test data for the task:
         test_data = TFGraphBatchIterable(
-            samples=task_sample.test_samples, max_num_nodes=max_num_nodes_in_batch
+            samples=task_sample.test_samples, max_num_nodes=max_num_nodes_in_batch,
+            regression_task=regression_task,
         )
         test_loss, test_num_graphs = 0.0, 0
         with tf.GradientTape() as meta_update_tape:
@@ -188,7 +194,7 @@ def metatrain_on_task_samples(
 
 
 def metatrain_loop(
-    model: MetalearningGraphBinaryClassificationTask,
+    model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     metatrain_valid_fn: MetatrainValidationCallback,
     dataset: FSMolDataset,
     max_num_nodes_in_batch: int,
@@ -204,6 +210,31 @@ def metatrain_loop(
     quiet: bool = False,
     aml_run: Optional[Run] = None,
 ) -> str:
+    """_summary_
+
+    Args:
+        model (Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask]): _description_
+        metatrain_valid_fn (MetatrainValidationCallback): _description_
+        dataset (FSMolDataset): _description_
+        max_num_nodes_in_batch (int): _description_
+        max_epochs (int): _description_
+        patience (int): _description_
+        save_dir (str): _description_
+        task_batch_size (int): batch size for task, the number of tasks in a batch
+        train_size (int): _description_
+        test_size (int): _description_
+        min_test_size (int): _description_
+        max_num_inner_train_steps (int): _description_
+        metatrain_task_specific_parameters (bool, optional): _description_. Defaults to True.
+        quiet (bool, optional): _description_. Defaults to False.
+        aml_run (Optional[Run], optional): _description_. Defaults to None.
+
+    Returns:
+        str: _description_
+
+    Yields:
+        Iterator[str]: _description_
+    """
     save_file = os.path.join(save_dir, f"best_validation.pkl")
 
     task_sampler = StratifiedTaskSampler(
@@ -312,11 +343,15 @@ def run_metatraining_from_args(args):
     stub_graph_dataset = FSMolStubGraphDataset()
 
     # Create the MAML model:
-    model_cls = MetalearningGraphBinaryClassificationTask
+    if args.regression_task:
+        model_cls = MetalearningGraphRegressionTask
+    else:
+        model_cls = MetalearningGraphBinaryClassificationTask
     model_params = model_cls.get_default_hyperparameters(args.gnn_type)
     model_params.update(MAML_MODEL_DEFAULT_HYPER_PARAMS)
     model_params.update(args.model_params_override or {})
     model_params.update({"metalearning_outer_loop_rate_scale": args.outer_loop_lr_scale})
+    model_params.update({"label_type": 'regression' if args.regression_task else 'classification'})
     model = model_cls(model_params, dataset=stub_graph_dataset)
     data_description = stub_graph_dataset.get_batch_tf_data_description()
     model.build(data_description.batch_features_shapes)
@@ -496,7 +531,7 @@ def get_metatraining_argparser():
     )
 
     parser.add_argument("--debug", action="store_true", help="Enable debug routines")
-
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     return parser
 
 
@@ -508,7 +543,8 @@ def run():
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"
     tf.get_logger().setLevel("ERROR")
     # os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
-    run_and_debug(lambda: run_metatraining_from_args(args), enable_debugging=args.debug)
+    run_metatraining_from_args(args)
+    # run_and_debug(lambda: run_metatraining_from_args(args), enable_debugging=args.debug)
 
 
 if __name__ == "__main__":

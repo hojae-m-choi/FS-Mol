@@ -281,7 +281,7 @@ def eval_model(
                         logger.debug("Sampling error: " + str(e))
                         continue
 
-                    test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed) # TODO: pass regression_task as arguments
+                    test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
                     
                     if isinstance(test_metrics, RegressionEvalMetrics):
                         eval_results_cls = FSMolRegTaskSampleEvalResults

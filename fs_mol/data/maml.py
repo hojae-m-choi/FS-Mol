@@ -88,15 +88,17 @@ class TFGraphBatchIterable(Iterable[Tuple[Dict[str, Any], Dict[str, Any]]]):
         max_num_graphs: Optional[int] = None,
         max_num_nodes: Optional[int] = None,
         max_num_edges: Optional[int] = None,
+        regression_task: bool = False,
     ):
         self._samples = samples
         self._shuffle = shuffle
-
+        self.regression_task = regression_task
         self._batcher = FSMolBatcher(
             max_num_graphs=max_num_graphs,
             max_num_nodes=max_num_nodes,
             max_num_edges=max_num_edges,
             finalizer_callback=maml_batch_finalizer,
+            regression_task=regression_task,
         )
 
     def __iter__(self) -> Iterator[Tuple[Dict[str, Any], Dict[str, Any]]]:

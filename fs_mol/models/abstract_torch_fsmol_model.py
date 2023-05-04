@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class TorchFSMolModelOutput:  # TODO: regression label
+class TorchFSMolModelOutput:
     # Predictions for each input molecule, as a [NUM_MOLECULES, 1] float tensor
     molecule_label: torch.Tensor
     label_type: str = 'classification'
