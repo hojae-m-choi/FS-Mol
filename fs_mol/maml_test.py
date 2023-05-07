@@ -19,6 +19,9 @@ from fs_mol.maml_train import VALIDATION_MODEL_DEFAULT_HYPER_PARAMS
 from fs_mol.models.metalearning_graph_binary_classification import (
     MetalearningGraphBinaryClassificationTask,
 )
+from fs_mol.models.metalearning_graph_regression import (
+    MetalearningGraphRegressionTask,
+)
 from fs_mol.utils.logging import FileLikeLogger
 from fs_mol.data.maml import FSMolStubGraphDataset
 from fs_mol.utils.maml_utils import eval_model_by_finetuning_on_task
@@ -35,19 +38,21 @@ def load_model_for_eval(args):
         with open(args.trained_model, "rb") as in_file:
             data_to_load = pickle.load(in_file)
             # Check whether model to load matches the type we are training
-            if data_to_load["model_class"] is MetalearningGraphBinaryClassificationTask:
+            if data_to_load["model_class"] is MetalearningGraphBinaryClassificationTask or data_to_load["model_class"] is MetalearningGraphRegressionTask:
                 model_cls = data_to_load["model_class"]
                 model_params = data_to_load["model_params"]
             else:
                 # initialise a new one
-                model_cls = MetalearningGraphBinaryClassificationTask
+                model_cls = MetalearningGraphRegressionTask if args.regression_task else MetalearningGraphBinaryClassificationTask
                 model_params = model_cls.get_default_hyperparameters("GNN_Edge_MLP")
                 model_params.update(data_to_load["model_params"])
                 model_params.update(VALIDATION_MODEL_DEFAULT_HYPER_PARAMS)
+                model_params.update({"label_type": 'regression' if args.regression_task else 'classification'})
     else:
-        model_cls = MetalearningGraphBinaryClassificationTask
+        model_cls = MetalearningGraphRegressionTask if args.regression_task else MetalearningGraphBinaryClassificationTask
         model_params = model_cls.get_default_hyperparameters("GNN_Edge_MLP")
         model_params.update(VALIDATION_MODEL_DEFAULT_HYPER_PARAMS)
+        model_params.update({"label_type": 'regression' if args.regression_task else 'classification'})
     model_params.update(args.model_params_override or {})
 
     # Create the model:
@@ -82,7 +87,7 @@ def run_from_args(args) -> None:
             task_sample=task_sample,
             temp_out_folder=temp_out_folder,
             max_num_nodes_in_batch=10000,
-            metric_to_use="avg_precision",
+            metric_to_use=args.test_metric,
             quiet=True,
         )
 
@@ -129,7 +134,13 @@ def run():
         type=lambda s: json.loads(s),
         help="JSON dictionary overriding model hyperparameter values.",
     )
-
+    parser.add_argument(
+        "--test-metric",
+        type=str,
+        default="avg_precision",
+        help="Metric to report from metatesting on validation tasks.",
+    )
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     parser.add_argument("--debug", dest="debug", action="store_true", help="Enable debug routines")
     args = parser.parse_args()
 

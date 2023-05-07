@@ -58,6 +58,23 @@ def parse_command_line():
         default=0.0001,
         help="Learning rate for shared model components.",
     )
+    parser.add_argument(
+        "--metric-to-use",
+        type=str,
+        choices=[
+            "acc",
+            "balanced_acc",
+            "f1",
+            "prec",
+            "recall",
+            "roc_auc",
+            "avg_precision",
+            "kappa",
+            "rmse"
+        ],
+        default="avg_precision",
+        help="Metric to evaluate on validation data.",
+    )
     parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
     return parser.parse_args()
 
@@ -91,7 +108,7 @@ def main():
                 ),
             learning_rate=args.learning_rate,
             task_specific_learning_rate=args.task_specific_lr,
-            metric_to_use="avg_precision",
+            metric_to_use=args.metric_to_use,
             seed=seed,
             quiet=True,
             device=device,
