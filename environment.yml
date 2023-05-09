@@ -20,6 +20,7 @@ dependencies:
     - numpy~=1.19.2 # 1.19.5 -> 1.21.6
     - scikit-learn
     - scikit-learn-intelex
+    - xgboost==1.6.2
     - tensorflow>=2.4
     - tf2-gnn~=2.12.0
     - more-itertools

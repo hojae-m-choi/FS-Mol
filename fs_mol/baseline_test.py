@@ -7,6 +7,7 @@ from typing import Dict, Optional, List, Any, Union
 import numpy as np
 import sklearn.ensemble
 import sklearn.neighbors
+import xgboost as xgb
 from dpu_utils.utils import run_and_debug
 from pyprojroot import here as project_root
 from sklearn.model_selection import GridSearchCV
@@ -47,6 +48,10 @@ DEFAULT_GRID_SEARCH: Dict[str, Dict[str, List[Any]]] = {
 }
 
 NAME_TO_MODEL_CLS: Dict[str, Any] = {
+    "XGboost": {
+        'classification': xgb.XGBClassifier,
+        'regression': xgb.XGBRegressor,
+    },
     "randomForest": {
         'classification': sklearn.ensemble.RandomForestClassifier,
         'regression': sklearn.ensemble.RandomForestRegressor,
