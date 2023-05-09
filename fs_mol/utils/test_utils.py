@@ -128,7 +128,6 @@ def set_up_test_run(
 
     return out_dir, dataset
 
-
 def write_csv_samples(output_csv_file: str,
                       task_sample: Iterable[FSMolTaskSampleEvalResults]):
     
@@ -195,91 +194,91 @@ def write_csv_pred_label(output_csv_file: str, test_results: Iterable[FSMolTaskS
                 )
     
     
-def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
-    if isinstance(test_results[0], FSMolRegTaskSampleEvalResults):
-        with open(output_csv_file, "w", newline="") as csv_file:
-            fieldnames = [
-                "num_train_requested",
-                "num_train",
-                "fraction_positive_train",
-                "num_test",
-                "fraction_positive_test",
-                "seed",
-                "valid_score",
-                'mean_absolute_error', 
-                'root_mean_squared_error', 
-                'max_error', 
-                'pearson_corr', 
-                'concordance_index', 
-                'spearman_corr', 
-                'r_squared', 
-                'kendall_tau'
-            ]
-            csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-            csv_writer.writeheader()
-
-            for test_result in test_results:
-                csv_writer.writerow(
-                    {
-                        "num_train_requested": test_result.num_train,
-                        "num_train": test_result.num_train,
-                        "fraction_positive_train": test_result.fraction_pos_train,
-                        "num_test": test_result.num_test,
-                        "fraction_positive_test": test_result.fraction_pos_test,
-                        "seed": test_result.seed,
-                        "mean_absolute_error": test_result.mae,
-                        "root_mean_squared_error": test_result.rmse,
-                        "max_error": test_result.mxe,
-                        "pearson_corr": test_result.pcc,
-                        "concordance_index": test_result.ci,
-                        "spearman_corr": test_result.scc,
-                        "r_squared": test_result.r2,
-                        "kendall_tau": test_result.tau,
-                    }
-                )
-    elif isinstance(test_results[0], FSMolBinTaskSampleEvalResults):
-        with open(output_csv_file, "w", newline="") as csv_file:
-            fieldnames = [
-                "num_train_requested",
-                "num_train",
-                "fraction_positive_train",
-                "num_test",
-                "fraction_positive_test",
-                "seed",
-                "valid_score",
-                "average_precision_score",
-                "roc_auc",
-                "acc",
-                "balanced_acc",
-                "precision",
-                "recall",
-                "f1_score",
-                "delta_auprc",
-            ]
-            csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-            csv_writer.writeheader()
-
-            for test_result in test_results:
-                csv_writer.writerow(
-                    {
-                        "num_train_requested": test_result.num_train,
-                        "num_train": test_result.num_train,
-                        "fraction_positive_train": test_result.fraction_pos_train,
-                        "num_test": test_result.num_test,
-                        "fraction_positive_test": test_result.fraction_pos_test,
-                        "seed": test_result.seed,
-                        "average_precision_score": test_result.avg_precision,
-                        "roc_auc": test_result.roc_auc,
-                        "acc": test_result.acc,
-                        "balanced_acc": test_result.balanced_acc,
-                        "precision": test_result.prec,
-                        "recall": test_result.recall,
-                        "f1_score": test_result.f1,
-                        "delta_auprc": test_result.avg_precision - test_result.fraction_pos_test,
-                    }
-                )
+def get_fields_from_result(test_result):
+    common_field_dict = {
+        "num_train_requested": test_result.num_train,
+        "num_train": test_result.num_train,
+        "fraction_positive_train": test_result.fraction_pos_train,
+        "num_test": test_result.num_test,
+        "fraction_positive_test": test_result.fraction_pos_test,
+        "seed": test_result.seed,
+        }
+    if isinstance(test_result, FSMolRegTaskSampleEvalResults):
+        return {
+            **common_field_dict,
+            "mean_absolute_error": test_result.mae,
+            "root_mean_squared_error": test_result.rmse,
+            "max_error": test_result.mxe,
+            "pearson_corr": test_result.pcc,
+            "concordance_index": test_result.ci,
+            "spearman_corr": test_result.scc,
+            "r_squared": test_result.r2,
+            "kendall_tau": test_result.tau,
+            }
+    elif isinstance(test_result, FSMolBinTaskSampleEvalResults):
+        return {
+            **common_field_dict,
+            "average_precision_score": test_result.avg_precision,
+            "roc_auc": test_result.roc_auc,
+            "acc": test_result.acc,
+            "balanced_acc": test_result.balanced_acc,
+            "precision": test_result.prec,
+            "recall": test_result.recall,
+            "f1_score": test_result.f1,
+            "delta_auprc": test_result.avg_precision - test_result.fraction_pos_test,
+            }
     else:
         raise NotImplementedError
+
+def get_fieldnames_from_result(test_result):
+    common_fieldnames = [
+        "num_train_requested",
+        "num_train",
+        "fraction_positive_train",
+        "num_test",
+        "fraction_positive_test",
+        "seed",
+        "valid_score"]
+    if isinstance(test_result, FSMolRegTaskSampleEvalResults):
+        return [
+            *common_fieldnames,
+            'mean_absolute_error', 
+            'root_mean_squared_error', 
+            'max_error', 
+            'pearson_corr', 
+            'concordance_index', 
+            'spearman_corr', 
+            'r_squared', 
+            'kendall_tau'
+            ]
+    elif isinstance(test_result, FSMolBinTaskSampleEvalResults):
+        return [
+            *common_fieldnames,
+            "average_precision_score",
+            "roc_auc",
+            "acc",
+            "balanced_acc",
+            "precision",
+            "recall",
+            "f1_score",
+            "delta_auprc",
+            ]
+    else:
+        raise NotImplementedError
+    
+def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
+    if len(test_results) == 0:
+        return None
+    else:
+        fieldnames = get_fieldnames_from_result(test_results[0])
+        
+    with open(output_csv_file, "w", newline="") as csv_file:
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        for test_result in test_results:
+            field_dict = get_fields_from_result(test_result)
+            csv_writer.writerow(field_dict)
+    
 
 def eval_model(
     test_model_fn: Callable[[FSMolTaskSample, str, int], BinaryEvalMetrics],
@@ -325,58 +324,71 @@ def eval_model(
                 test_size_or_ratio=test_size_or_ratio,
                 allow_smaller_test=True,
             )
-
-            for run_idx in range(num_samples):
-                logger.info(f"=== Evaluating on {task.name}, #train {train_size}, run {run_idx}")
-                with prefix_log_msgs(
-                    f" Test - Task {task.name} - Size {train_size:3d} - Run {run_idx}"
-                ), tempfile.TemporaryDirectory() as temp_out_folder:
-                    local_seed = seed + run_idx
-
-                    try:
-                        task_sample = task_sampler.sample(task, seed=local_seed)
-                    except (
-                        DatasetTooSmallException,
-                        DatasetClassTooSmallException,
-                        FoldTooSmallException,
-                        ValueError,
-                    ) as e:
-                        logger.debug(
-                            f"Failed to draw sample with {train_size} train points for {task.name}. Skipping."
-                        )
-                        logger.debug("Sampling error: " + str(e))
-                        continue
-                    else:
-                        if out_dir is not None:
-                            write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
-
-                    test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
-                    
-                    if isinstance(test_metrics, RegressionEvalMetrics):
-                        eval_results_cls = FSMolRegTaskSampleEvalResults
-                    elif isinstance(test_metrics, BinaryEvalMetrics):
-                        eval_results_cls = FSMolBinTaskSampleEvalResults
-                    else:
-                        raise NotImplementedError
-                        
-                    test_results.append(
-                        eval_results_cls(
-                            task_name=task.name,
-                            seed=local_seed,
-                            num_train=train_size,
-                            num_test=len(task_sample.test_samples),
-                            fraction_pos_train=task_sample.train_pos_label_ratio,
-                            fraction_pos_test=task_sample.test_pos_label_ratio,
-                            **dataclasses.asdict(test_metrics),
-                        )
-                    )
+            test_results.extend(
+                eval_model_n_trials(test_model_fn, 
+                                    task, task_sampler, 
+                                    num_samples, seed,
+                                    out_dir=out_dir)
+                                    )
 
         task_to_results[task.name] = test_results
 
         if out_dir is not None:
             write_csv_summary(os.path.join(out_dir, f"{task.name}_eval_results.csv"), test_results)
             write_csv_pred_label(os.path.join(out_dir, f"{task.name}_pred_label.csv"), test_results)
-
+        
     logger.info(f"=== Completed evaluation on all tasks.")
 
     return task_to_results
+
+def eval_model_n_trials(test_model_fn, 
+                        task, task_sampler, 
+                        num_samples, seed,
+                        out_dir: Optional[str] = None,):
+    test_results: List[FSMolTaskSampleEvalResults] = []
+    train_size = task_sampler._train_size_or_ratio
+    for run_idx in range(num_samples):
+        logger.info(f"=== Evaluating on {task.name}, #train {train_size}, run {run_idx}")
+        with prefix_log_msgs(
+            f" Test - Task {task.name} - Size {train_size:3d} - Run {run_idx}"
+        ), tempfile.TemporaryDirectory() as temp_out_folder:
+            local_seed = seed + run_idx
+
+            try:
+                task_sample = task_sampler.sample(task, seed=local_seed)
+            except (
+                DatasetTooSmallException,
+                DatasetClassTooSmallException,
+                FoldTooSmallException,
+                ValueError,
+            ) as e:
+                logger.debug(
+                    f"Failed to draw sample with {train_size} train points for {task.name}. Skipping."
+                )
+                logger.debug("Sampling error: " + str(e))
+                continue
+            else:
+                if out_dir is not None:
+                    write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
+
+            test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
+            
+            if isinstance(test_metrics, RegressionEvalMetrics):
+                eval_results_cls = FSMolRegTaskSampleEvalResults
+            elif isinstance(test_metrics, BinaryEvalMetrics):
+                eval_results_cls = FSMolBinTaskSampleEvalResults
+            else:
+                raise NotImplementedError
+                
+            test_results.append(
+                eval_results_cls(
+                    task_name=task.name,
+                    seed=local_seed,
+                    num_train=train_size,
+                    num_test=len(task_sample.test_samples),
+                    fraction_pos_train=task_sample.train_pos_label_ratio,
+                    fraction_pos_test=task_sample.test_pos_label_ratio,
+                    **dataclasses.asdict(test_metrics),
+                )
+            )
+    return test_results
