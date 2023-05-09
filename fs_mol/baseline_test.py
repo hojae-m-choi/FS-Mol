@@ -14,8 +14,18 @@ from sklearn.model_selection import GridSearchCV
 sys.path.insert(0, str(project_root()))
 
 from fs_mol.data.fsmol_task import FSMolTaskSample
+from fs_mol.data.active_label import ActiveLearningLabel
+from fs_mol.models.ensemble import (train_ensemble,
+                                    predict_ensemble,
+                                    metric_ensemble,
+                                    uncertainty_ensemble)
+
 from fs_mol.utils.cli_utils import str2bool
-from fs_mol.utils.metrics import BinaryEvalMetrics, compute_binary_task_metrics, RegressionEvalMetrics, compute_regression_task_metrics
+from fs_mol.utils.metrics import (BinaryEvalMetrics, 
+                                  compute_binary_task_metrics, 
+                                  RegressionEvalMetrics, 
+                                  compute_regression_task_metrics,
+                                  get_uncertain_indices)
 from fs_mol.utils.test_utils import (
     eval_model,
     add_eval_cli_args,
@@ -47,6 +57,104 @@ NAME_TO_MODEL_CLS: Dict[str, Any] = {
         'regression': sklearn.neighbors.KNeighborsRegressor,
     },
 }
+DEFAULT_PARALLEL_NJOBS = -1
+
+def test_with_active_learning(
+    model_name: str,
+    task_sample: FSMolTaskSample,
+    use_grid_search: bool = True,
+    grid_search_parameters: Optional[Dict[str, Any]] = None,
+    model_params: Dict[str, Any] = {},
+    regression_task: bool = False
+) -> Union[RegressionEvalMetrics,BinaryEvalMetrics]:
+    train_data = task_sample.train_samples
+    test_data = task_sample.test_samples
+    
+    # get data in to form for sklearn
+    X_train = np.array([x.get_fingerprint() for x in train_data])
+    X_test = np.array([x.get_fingerprint() for x in test_data])
+    logger.info(f" Training {model_name} with {X_train.shape[0]} datapoints.")
+    
+    if regression_task:
+        y_train = [float(x.numeric_label) for x in train_data]  # regression label
+        # TODO: scaling y_train
+        y_test = [float(x.numeric_label) for x in test_data]  # regression label  
+        task_type = 'regression'
+    else:
+        y_train = [float(x.bool_label) for x in train_data]  # binary label
+        y_test = [float(x.bool_label) for x in test_data]  # binary label
+        task_type = 'classification'
+        
+    # use the train data to train a baseline model with CV grid search
+    # reinstantiate model for each seed.
+    # TODO: split train_data with 3 folds
+    # TODO: ensemble of models (best model with each data folds)
+    
+    models_dict: Dict[str, object] = {}
+    data_dict = {}
+    model_param_dict = {}
+    for i in range(5):
+        if use_grid_search:
+            if grid_search_parameters is None:
+                grid_search_parameters = DEFAULT_GRID_SEARCH[model_name]
+                # in the case of kNNs the grid search has to be modified -- one cannot have
+                # more nearest neighbours than datapoints.
+                if model_name == "kNN":
+                    permitted_n_neighbors = [
+                        x for x in grid_search_parameters["n_neighbors"] if x < int(len(train_data) / 2)
+                    ]
+                    grid_search_parameters.update({"n_neighbors": permitted_n_neighbors})
+            grid_search = GridSearchCV(NAME_TO_MODEL_CLS[model_name][task_type](), grid_search_parameters,
+                                    n_jobs=DEFAULT_PARALLEL_NJOBS)
+            models_dict[f'{model_name}_{i}'] = grid_search
+                
+        else:
+            model = NAME_TO_MODEL_CLS[model_name][task_type](n_jobs=DEFAULT_PARALLEL_NJOBS)
+            params = model.get_params()
+            params.update(model_params)
+            model.set_params(**params) # maybe errota. no **params in parameters    
+            models_dict[f'{model_name}_{i}'] = model
+    
+    # Init active-learning label
+    ac_label = ActiveLearningLabel(oracle_size=len(X_train))  ## AL
+    
+    # Start active-learning cycle
+    ac_label.disclose_randomly(n = 32)  ## AL
+    ac_label.label(pool_indices_list = list(range(32)))  ## AL
+    for curr_cycle in range(3):  ## AL
+        labelled_indices = ac_label.get_indices_for_active_cycle()  ## AL
+        X_labelled = X_train[labelled_indices, :]  ## AL
+        y_labelled = [y_train[idx] for idx in labelled_indices]  ## AL
+        
+        # Train models:
+        logger.info(f" AL cycle-{curr_cycle} with {X_labelled.shape[0]} datapoints.")
+        trained_models_dict = train_ensemble(models_dict, X_labelled, y_labelled)
+        
+        # Compute test results:
+        test_predictions_dict = predict_ensemble(trained_models_dict, X_test, regression_task)
+        test_metrics = metric_ensemble(test_predictions_dict, y_test, regression_task)
+        logger.info(f" Test metrics: {test_metrics}")
+        
+        # Import disclosed samples into pool
+        ac_label.disclose_randomly(n = 28)  ## AL
+        unlabelled_indices = ac_label.unlabelled_indices  ## AL
+        X_pool = X_train[unlabelled_indices, :]  ## AL
+        
+        # Extract uncertain samples
+        logger.info(f" Computing uncertainty with {X_pool.shape[0]} datapoints.")  ## AL
+        pool_predictions_dict = predict_ensemble(trained_models_dict, X_pool, regression_task)  ## AL
+        uncertainty = uncertainty_ensemble(pool_predictions_dict)  ## AL
+        sampled_pool_indices = get_uncertain_indices(uncertainty, k = 10)  ## AL
+        
+        # Label selected samples
+        logger.info(f" Label {len(sampled_pool_indices)} datapoints.")  ## AL
+        ac_label.label(sampled_pool_indices)  ## AL
+        
+    logger.info(
+        f" Dataset sample has {task_sample.test_pos_label_ratio:.4f} positive label ratio in test data."
+    )
+
+    return test_metrics
 
 
 def test(
@@ -86,11 +194,12 @@ def test(
                     x for x in grid_search_parameters["n_neighbors"] if x < int(len(train_data) / 2)
                 ]
                 grid_search_parameters.update({"n_neighbors": permitted_n_neighbors})
-            grid_search = GridSearchCV(NAME_TO_MODEL_CLS[model_name][task_type](), grid_search_parameters)
+            grid_search = GridSearchCV(NAME_TO_MODEL_CLS[model_name][task_type](), grid_search_parameters,
+                                       n_jobs=DEFAULT_PARALLEL_NJOBS)
         grid_search.fit(X_train, y_train)
         model = grid_search.best_estimator_
     else:
-        model = NAME_TO_MODEL_CLS[model_name][task_type]()
+        model = NAME_TO_MODEL_CLS[model_name][task_type](n_jobs=DEFAULT_PARALLEL_NJOBS)
         params = model.get_params()
         params.update(model_params)
         model.set_params(**params) # maybe errota. no **params in parameters
@@ -119,7 +228,7 @@ def run_from_args(args) -> None:
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
     ) -> Union[RegressionEvalMetrics, BinaryEvalMetrics]:
-        return test(
+        return test_with_active_learning(
             model_name=args.model,
             task_sample=task_sample,
             use_grid_search=args.grid_search,

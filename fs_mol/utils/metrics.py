@@ -211,3 +211,8 @@ def compute_metrics(
         )
 
     return per_task_results
+
+def get_uncertain_indices(uncertainty, k):
+    sorted_indices = np.argsort(uncertainty)  # largest index at last
+    k_indices = sorted_indices[-k:]
+    return k_indices
