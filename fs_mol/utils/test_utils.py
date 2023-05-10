@@ -128,7 +128,38 @@ def set_up_test_run(
 
     return out_dir, dataset
 
+def write_csv_pred_label(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
+    
+    with open(output_csv_file, "w", newline="") as csv_file:
+        fieldnames = [
+            "num_train_requested",
+            "num_train",
+            "fraction_positive_train",
+            "seed",
+            "pred_label",
+            "pred",
+            "label",
+        ]
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
 
+        for test_result in test_results:
+            common_cols = {
+                    "num_train_requested": test_result.num_train,
+                    "num_train": test_result.num_train,
+                    "fraction_positive_train": test_result.fraction_pos_train,
+                    "seed": test_result.seed,
+                }
+            for pred, label in zip(test_result.predictions, test_result.labels):
+                csv_writer.writerow(
+                    {
+                        **common_cols,
+                        "pred": pred,
+                        "label": label,
+                    }
+                )
+    
+    
 def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
     if isinstance(test_results[0], FSMolRegTaskSampleEvalResults):
         with open(output_csv_file, "w", newline="") as csv_file:
@@ -306,6 +337,7 @@ def eval_model(
 
         if out_dir is not None:
             write_csv_summary(os.path.join(out_dir, f"{task.name}_eval_results.csv"), test_results)
+            write_csv_pred_label(os.path.join(out_dir, f"{task.name}_pred_label.csv"), test_results)
 
     logger.info(f"=== Completed evaluation on all tasks.")
 
