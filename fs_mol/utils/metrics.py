@@ -1,7 +1,7 @@
 import dataclasses
 from typing import Dict, Tuple, List
 from typing_extensions import Literal
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from sklearn.metrics import (
@@ -24,8 +24,13 @@ from scipy.stats import (
     kendalltau
 )
 
-    
 @dataclass(frozen=True)
+class EvalMetrics:
+    size: int
+    predictions: List[float] = field(default_factory=list)
+    labels: List[float] = field(default_factory=list)
+    
+@dataclass(frozen=True, repr=False)
 class BinaryEvalMetrics:
     size: int
     acc: float
@@ -36,7 +41,10 @@ class BinaryEvalMetrics:
     roc_auc: float
     avg_precision: float
     kappa: float
-
+    
+    def __repr__(self):
+        kws = [f"{key}={value!r}" for key, value in self.__dict__.items() if isinstance(value, (int, float, str))]
+        return "{}({})".format(type(self).__name__, ", ".join(kws))
 
 BinaryMetricType = Literal[
     "acc", "balanced_acc", "f1", "prec", "recall", "roc_auc", "avg_precision", "kappa"
@@ -65,18 +73,21 @@ def compute_binary_task_metrics(predictions: List[float], labels: List[float]) -
         kappa=cohen_kappa_score(labels, normalized_predictions),
     )
 
-@dataclass(frozen=True)
-class RegressionEvalMetrics:
+@dataclass(frozen=True, repr=False)
+class RegressionEvalMetrics(EvalMetrics):
     size: int
-    mae: float
-    rmse: float
-    mxe: float
-    pcc: float  # pearson correlation
-    ci: float  # c statistics ( concordance index )
-    scc: float  # spearman correlation
-    r2: float
-    tau: float
-
+    mae: float = 0
+    rmse: float = 0
+    mxe: float = 0
+    pcc: float = 0 # pearson correlation
+    ci: float = 0 # c statistics ( concordance index )
+    scc: float = 0 # spearman correlation
+    r2: float = 0
+    tau: float = 0
+    
+    def __repr__(self):
+        kws = [f"{key}={value!r}" for key, value in self.__dict__.items() if isinstance(value, (int, float, str))]
+        return "{}({})".format(type(self).__name__, ", ".join(kws))
 
 RegressionMetricType = Literal[
     "mae", "rmse", "mxe", "pcc", "ci", "scc", "r2", "tau"
@@ -88,6 +99,8 @@ def compute_regression_task_metrics(predictions: List[float], labels: List[float
     
     return RegressionEvalMetrics(
         size=len(predictions),
+        predictions=predictions,
+        labels=labels,
         mae=mean_absolute_error(labels, predictions),
         rmse=np.sqrt(mean_squared_error(labels, predictions)),
         mxe=max_error(labels, predictions),
@@ -95,13 +108,23 @@ def compute_regression_task_metrics(predictions: List[float], labels: List[float
         ci=(kendalltau(labels, predictions).correlation+1)/2, # 'correlation' for scipy==1.7.3, but 'statistic' for scipy==1.10.1
         scc=spearmanr(labels, predictions).correlation,
         r2=r2_score(labels, predictions),
-        tau=kendalltau(labels, predictions).correlation
+        tau=kendalltau(labels, predictions).correlation,
     )
 
 
 def avg_metrics_over_tasks(
     task_results: Dict[str, List[BinaryEvalMetrics]],
 ) -> Dict[str, Tuple[float, float]]:
+    """average results over all tasks in input dictionary. 
+    the average over each task is first created.
+    technically input is Dict[str, FSMolTaskSampleEvalResults], but everything
+
+    Args:
+        task_results (Dict[str, List[BinaryEvalMetrics]]): _description_
+
+    Returns:
+        Dict[str, Tuple[float, float]]: _description_
+    """
     # average results over all tasks in input dictionary
     # the average over each task is first created
     # technically input is Dict[str, FSMolTaskSampleEvalResults], but everything
@@ -146,6 +169,19 @@ def compute_metrics(
     task_to_labels: Dict[int, List[float]],
     label_type: str = 'classification',
 ) -> Dict[int, BinaryEvalMetrics]:
+    """Compute metrics per task
+
+    Args:
+        task_to_predictions (Dict[int, List[float]]): _description_
+        task_to_labels (Dict[int, List[float]]): _description_
+        label_type (str, optional): _description_. Defaults to 'classification'.
+
+    Raises:
+        NotImplementedError: _description_
+
+    Returns:
+        Dict[int, BinaryEvalMetrics]: _description_
+    """
     if label_type == 'classification':
         compute_task_metrics_fn = compute_binary_task_metrics
     elif label_type == 'regression':
