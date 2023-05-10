@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Iterable, List, Tuple, Optional, Iterator
+from functools import partial
 
 import numpy as np
 import tensorflow as tf
@@ -12,7 +13,8 @@ from fs_mol.data.fsmol_task import MoleculeDatapoint
 logger = logging.getLogger(__name__)
 
 
-def maml_batch_finalizer(batch_data: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def maml_batch_finalizer(batch_data: Dict[str, Any],
+                         regression_task:bool = False) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     fsmol_batch = fsmol_batch_finalizer(batch_data)
 
     batch_features = {
@@ -26,8 +28,9 @@ def maml_batch_finalizer(batch_data: Dict[str, Any]) -> Tuple[Dict[str, Any], Di
         ].astype(np.int32)
         batch_features[f"edge_features_{edge_type_idx}"] = fsmol_batch.edge_features[edge_type_idx]
 
+    labels = batch_data["numeric_labels"] if regression_task else batch_data["bool_labels"]
     batch_labels = {
-        "target_value": np.stack(batch_data["bool_labels"], axis=0).astype(np.float32),
+        "target_value": np.stack(labels, axis=0).astype(np.float32),
     }
 
     return batch_features, batch_labels
@@ -97,7 +100,9 @@ class TFGraphBatchIterable(Iterable[Tuple[Dict[str, Any], Dict[str, Any]]]):
             max_num_graphs=max_num_graphs,
             max_num_nodes=max_num_nodes,
             max_num_edges=max_num_edges,
-            finalizer_callback=maml_batch_finalizer,
+            finalizer_callback=partial(
+                maml_batch_finalizer,
+                regression_task=regression_task),
             regression_task=regression_task,
         )
 
