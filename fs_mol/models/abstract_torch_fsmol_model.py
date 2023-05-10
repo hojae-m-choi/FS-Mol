@@ -41,7 +41,9 @@ from fs_mol.utils.metrics import (
     avg_task_metrics_list,
     compute_metrics,
     BinaryEvalMetrics,
+    RegressionEvalMetrics,
     BinaryMetricType,
+    RegressionMetricType,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,7 +75,7 @@ class TorchFSMolModelLoss:
 BatchFeaturesType = TypeVar("BatchFeaturesType")
 BatchOutputType = TypeVar("BatchOutputType", bound=TorchFSMolModelOutput)
 BatchLossType = TypeVar("BatchLossType", bound=TorchFSMolModelLoss)
-MetricType = Union[BinaryMetricType, Literal["loss"]]
+MetricType = Union[BinaryMetricType, RegressionMetricType, Literal["loss"]]
 ModelStateType = Dict[str, Any]
 
 
@@ -274,7 +276,7 @@ def run_on_data_iterable(
     quiet: bool = False,
     metric_name_prefix: str = "",
     aml_run=None,
-) -> Tuple[float, Dict[int, BinaryEvalMetrics]]:
+) -> Tuple[float, Dict[int, Union[BinaryEvalMetrics, RegressionEvalMetrics]]]:
     """Run the given model on the provided data loader.
 
     Args:
@@ -441,7 +443,7 @@ def eval_model_by_finetuning_on_task(
     seed: int = 0,
     quiet: bool = False,
     device: Optional[torch.device] = None,
-) -> BinaryEvalMetrics:
+) -> Union[BinaryEvalMetrics,RegressionEvalMetrics]:
     # Build the model afresh and load the shared weights.
     model: AbstractTorchFSMolModel[
         BatchFeaturesType, BatchOutputType, BatchLossType

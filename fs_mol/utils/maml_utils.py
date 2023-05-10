@@ -24,6 +24,7 @@ from fs_mol.utils.metrics import (
     BinaryEvalMetrics,
     RegressionEvalMetrics,
     BinaryMetricType,
+    RegressionMetricType,
     avg_metrics_over_tasks,
     compute_binary_task_metrics,
     compute_regression_task_metrics,
@@ -34,7 +35,7 @@ from fs_mol.utils.test_utils import eval_model
 logger = logging.getLogger(__name__)
 
 
-MetricType = Union[BinaryMetricType, Literal["loss"]]
+MetricType = Union[BinaryMetricType, RegressionMetricType, Literal["loss"]]
 
 
 def save_model(
@@ -157,7 +158,7 @@ def eval_model_by_finetuning_on_task(
     max_num_epochs: int = 50,
     patience: int = 10,
     quiet: bool = False,
-) -> BinaryEvalMetrics:
+) -> Union[BinaryEvalMetrics,RegressionEvalMetrics]:
     model_save_file = os.path.join(temp_out_folder, f"best_model.pkl")
     # We now need to set the parameters to their current values in the training model:
     for var in model.trainable_variables:
@@ -236,7 +237,7 @@ def eval_model_by_finetuning_on_tasks(
 ) -> float:
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> BinaryEvalMetrics:
+    ) -> Union[BinaryEvalMetrics, RegressionEvalMetrics]:
         return eval_model_by_finetuning_on_task(
             model=model,
             model_weights=model_weights,
