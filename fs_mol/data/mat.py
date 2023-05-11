@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple
+from functools import partial
 
 import numpy as np
 import torch
@@ -61,10 +62,11 @@ def mat_batcher_add_sample_fn(
     batch_data["mat_features"].append(sample.mat_features)
 
 
-def mat_batcher_finalizer_fn(batch_data: Dict[str, Any]) -> Tuple[FSMolMATBatch, np.ndarray]:
+def mat_batcher_finalizer_fn(batch_data: Dict[str, Any], regression_task: bool = False) -> Tuple[FSMolMATBatch, np.ndarray]:
+    labels = batch_data["numeric_labels"] if regression_task else batch_data["bool_labels"]
     adjacency_matrix, node_features, distance_matrix, labels = mol_collate_func(
         construct_dataset(
-            batch_data["mat_features"], [[label] for label in batch_data["bool_labels"]]
+            batch_data["mat_features"], [[label] for label in labels]
         )
     )
 
@@ -74,7 +76,7 @@ def mat_batcher_finalizer_fn(batch_data: Dict[str, Any]) -> Tuple[FSMolMATBatch,
         distance_matrix=distance_matrix,
     )
 
-    return batch, labels.squeeze(dim=-1).cpu().detach().numpy()
+    return batch, labels.squeeze(dim=-1).detach()
 
 
 def mat_task_reader_fn(paths: List[RichPath], idx: int) -> List[FSMolTask]:
@@ -82,10 +84,14 @@ def mat_task_reader_fn(paths: List[RichPath], idx: int) -> List[FSMolTask]:
     return [FSMolTask(name=task.name, samples=mat_process_samples(task.samples))]
 
 
-def get_mat_batcher(max_num_graphs: int):
+def get_mat_batcher(max_num_graphs: int, regression_task: bool = False):
     return FSMolBatcher(
         max_num_graphs=max_num_graphs,
         init_callback=mat_batcher_init_fn,
         per_datapoint_callback=mat_batcher_add_sample_fn,
-        finalizer_callback=mat_batcher_finalizer_fn,
+        finalizer_callback=partial(
+                mat_batcher_finalizer_fn,
+                regression_task=regression_task,
+                ),
+        regression_task=regression_task,
     )

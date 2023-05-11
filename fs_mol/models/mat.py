@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 from typing import Any, Dict, Optional
+import dataclasses
+from dataclasses import dataclass
 
 import torch
 from pyprojroot import here as project_root
@@ -25,7 +27,10 @@ from transformer import GraphTransformer, make_model
 
 logger = logging.getLogger(__name__)
 
-
+@dataclass
+class MATModelConfig:
+    num_tasks: int = 1
+    label_type: str = 'classification'
 class MATModel(
     GraphTransformer,
     AbstractTorchFSMolModel[FSMolMATBatch, TorchFSMolModelOutput, TorchFSMolModelLoss],
@@ -34,9 +39,10 @@ class MATModel(
         mask = torch.sum(torch.abs(batch.node_features), dim=-1) != 0
 
         return TorchFSMolModelOutput(
-            molecule_binary_label=super().forward(
+            molecule_label=super().forward(
                 batch.node_features, mask, batch.adjacency_matrix, batch.distance_matrix, None
-            )
+            ),
+            label_type=self.label_type,
         )
 
     def get_model_state(self) -> Dict[str, Any]:
@@ -55,6 +61,8 @@ class MATModel(
         # contain optimizer state. For now we only want the weights, so throw out the rest.
         if "model_state_dict" in model_state:
             pretrained_state_dict = model_state["model_state_dict"]
+        else:
+            pretrained_state_dict = model_state
 
         for name, param in pretrained_state_dict.items():
             if not load_task_specific_weights and self.is_param_task_specific(name):
@@ -71,6 +79,15 @@ class MATModel(
         quiet: bool = False,
         device: Optional[torch.device] = None,
     ) -> MATModel:
+        
+        config = MATModelConfig()
+        for key, val in config_overrides.items():
+            if not quiet:
+                logger.info(
+                    f"  I: Overriding model config parameter {key} from {getattr(config, key)} to {val}!"
+                )
+            setattr(config, key, val)
+        
         # Parameters used for pretraining the original MAT model.
         model_params = {
             "d_atom": 28,
@@ -88,9 +105,20 @@ class MATModel(
         }
 
         model = make_model(**model_params)
-        model.to(device)
-
+        if device is not None:
+            model.to(device)
+            
         # Cast to a subclass, which is valid because `MATModel` only adds a bunch of methods.
         model.__class__ = MATModel
+        
+        for key, val in dataclasses.asdict(config).items():
+            setattr( model, key, val)
+            
+        if model.label_type == 'classification':
+            model.criterion = torch.nn.BCEWithLogitsLoss(reduction="none")
+        elif model.label_type == 'regression':
+            model.criterion = torch.nn.MSELoss(reduction="none")
+        else:
+            raise KeyError
 
         return model
