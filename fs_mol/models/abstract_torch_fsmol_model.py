@@ -443,12 +443,14 @@ def eval_model_by_finetuning_on_task(
     seed: int = 0,
     quiet: bool = False,
     device: Optional[torch.device] = None,
+    config_overrides: Dict[str, Any] = {},
 ) -> Union[BinaryEvalMetrics,RegressionEvalMetrics]:
     # Build the model afresh and load the shared weights.
+    config_overrides.update({"num_tasks": 1})  # this forcing num_taks as 1
     model: AbstractTorchFSMolModel[
         BatchFeaturesType, BatchOutputType, BatchLossType
     ] = model_cls.build_from_model_file(
-        model_weights_file, quiet=quiet, device=device, config_overrides={"num_tasks": 1}
+        model_weights_file, quiet=quiet, device=device, config_overrides=config_overrides
     )
     load_model_weights(model, model_weights_file, load_task_specific_weights=False)
 

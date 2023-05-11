@@ -65,7 +65,24 @@ def parse_command_line():
         default=0.00001,
         help="Learning rate for shared model components.",
     )
-
+    parser.add_argument("--regression-task", dest="regression_task", action="store_true", help="Enable train/test for regression task")
+    parser.add_argument(
+        "--metric-to-use",
+        type=str,
+        choices=[
+            "acc",
+            "balanced_acc",
+            "f1",
+            "prec",
+            "recall",
+            "roc_auc",
+            "avg_precision",
+            "kappa",
+            "rmse"
+        ],
+        default="avg_precision",
+        help="Metric to evaluate on validation data.",
+    )
     return parser.parse_args()
 
 
@@ -93,21 +110,22 @@ def main():
             model_weights_file,
             model_cls=MATModel,
             task_sample=task_sample,
-            temp_out_folder=temp_out_folder,
-            batcher=get_mat_batcher(args.batch_size),
+            # temp_out_folder=temp_out_folder,
+            batcher=get_mat_batcher(args.batch_size, regression_task=args.regression_task),
             learning_rate=args.learning_rate,
             task_specific_learning_rate=args.task_specific_lr,
-            metric_to_use="avg_precision",
+            metric_to_use=args.metric_to_use,
             seed=seed,
             quiet=True,
             device=device,
+            config_overrides={'label_type': 'regression'}
         )
 
     eval_model(
         test_model_fn=test_model_fn,
         dataset=dataset,
         train_set_sample_sizes=args.train_sizes,
-        out_dir=args.save_dir,
+        out_dir=out_dir,
         num_samples=args.num_runs,
         valid_size_or_ratio=0.2,
         task_reader_fn=mat_task_reader_fn,
