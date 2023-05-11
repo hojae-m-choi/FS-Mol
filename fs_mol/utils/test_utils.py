@@ -128,6 +128,41 @@ def set_up_test_run(
 
     return out_dir, dataset
 
+
+def write_csv_samples(output_csv_file: str,
+                      task_sample: Iterable[FSMolTaskSampleEvalResults]):
+    
+    with open(output_csv_file, "w", newline="") as csv_file:
+        fieldnames = [
+            "task_name",
+            "assay_type",
+            "smiles",
+            "stage",
+            "relation",
+            "numeric_label",
+            "bool_label",
+        ]
+        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+        csv_writer.writeheader()
+        
+        for stage in ('train', 'valid', 'test'):
+            common_cols = {
+                    "stage": stage,
+                    "task_name": task_sample.name,
+                }
+            for sample in getattr(task_sample, f'{stage}_samples'):
+                    csv_writer.writerow(
+                        {
+                            **common_cols,
+                            "assay_type": sample.assay_type,
+                            "smiles": sample.smiles,
+                            "relation": sample.relation,
+                            "numeric_label": sample.numeric_label,
+                            "bool_label": sample.bool_label,
+                        }
+                    )
+                
+                
 def write_csv_pred_label(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
     
     with open(output_csv_file, "w", newline="") as csv_file:
@@ -311,6 +346,9 @@ def eval_model(
                         )
                         logger.debug("Sampling error: " + str(e))
                         continue
+                    else:
+                        if out_dir is not None:
+                            write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
 
                     test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
                     
