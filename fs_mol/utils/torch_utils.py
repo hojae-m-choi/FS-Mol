@@ -6,7 +6,7 @@ import torch
 
 def torchify(data, device: torch.device):
     if isinstance(data, (int, float, str, torch.Tensor)):
-        return data
+        return data  # TODO: should I add `.to(device)` at the end of line?
     elif isinstance(data, tuple):
         return tuple(torchify(e, device) for e in data)
     elif isinstance(data, list):
