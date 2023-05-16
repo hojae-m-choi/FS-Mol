@@ -139,7 +139,10 @@ def avg_metrics_over_tasks(
     metric_fields: List[str] = list(list(aggregated_metrics.values())[0].keys())
     for metric_field in metric_fields:
         metric_values = [x.get(metric_field)[0] for _, x in aggregated_metrics.items()]
-        aggregated_over_tasks[metric_field] = (np.mean(metric_values), np.std(metric_values))
+        try:
+            aggregated_over_tasks[metric_field] = (np.mean(metric_values), np.std(metric_values))
+        except ValueError as e:
+            raise e
 
     return aggregated_over_tasks
 

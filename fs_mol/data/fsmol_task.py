@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
+import json 
 
 import numpy as np
 from more_itertools import partition
@@ -7,6 +8,24 @@ from dpu_utils.utils import RichPath
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, Descriptors
 
+def transform_percent(x):
+    if isinstance(x, str):
+        return x
+    if isinstance(x, (int, float)):
+        return (x-50)/45+4.5
+    else:
+        return "nan"
+    
+def transform_nm(x):
+    if isinstance(x, str):
+        return x
+    if isinstance(x, (int, float)):
+        return 9-np.log10(x) if x > 0 else np.nan
+    else:
+        return "nan"
+
+with open('datasets/fs-mol/topUnit.json', 'r') as file:
+    CHEMBLID_TOPUNIT_DICT = json.load(file)
 
 def get_task_name_from_path(path: RichPath) -> str:
     # Use filename as task name:
@@ -125,12 +144,23 @@ class FSMolTask:
                 else:
                     adjacency_lists.append(np.zeros(shape=(0, 2), dtype=np.int64))
 
+            # filter out relation is not equal
+            # if raw_sample["Relation"] != '=':
+            #     continue
+            
+            # transform labels
+            topunit = CHEMBLID_TOPUNIT_DICT[get_task_name_from_path(path)]
+            if topunit == '%':
+                transform = transform_percent
+            else: 
+                transform = transform_nm
+                
             samples.append(
                 MoleculeDatapoint(
                     task_name=get_task_name_from_path(path),
                     smiles=raw_sample["SMILES"],
                     bool_label=bool(float(raw_sample["Property"])),
-                    numeric_label=float(raw_sample.get("RegressionProperty") or "nan"),
+                    numeric_label=float(transform(raw_sample.get("RegressionProperty") or "nan")),
                     log_numeric_label=float(raw_sample.get("LogRegressionProperty") or "nan"),
                     fingerprint=fingerprint,
                     descriptors=descriptors,
