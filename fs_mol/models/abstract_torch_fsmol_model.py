@@ -412,6 +412,7 @@ def train_loop(
         logger.log(log_level, f"  Validation metric: {valid_metric:.5f}")
         
         # early stopping
+        # valid_metric should be the higher, the better performance
         if valid_metric > best_valid_metric:
             logger.log(
                 log_level,
