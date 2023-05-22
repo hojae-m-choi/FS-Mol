@@ -41,7 +41,7 @@ from fs_mol.models.metalearning_graph_regression import (
 )
 from fs_mol.utils.cli_utils import add_train_cli_args, set_up_train_run, str2bool
 from fs_mol.utils.logging import FileLikeLogger, PROGRESS_LOG_LEVEL
-from fs_mol.utils.maml_utils import save_model, eval_model_by_finetuning_on_tasks
+from fs_mol.utils.maml_utils import save_model, validate_model_by_finetuning_on_tasks
 
 
 logger = logging.getLogger(__name__)
@@ -379,7 +379,7 @@ def run_metatraining_from_args(args):
     metatrain_loop(
         model=model,
         metatrain_valid_fn=partial(
-            eval_model_by_finetuning_on_tasks,
+            validate_model_by_finetuning_on_tasks,
             model=valid_model,
             dataset=fsmol_dataset,
             max_num_nodes_in_batch=10000,

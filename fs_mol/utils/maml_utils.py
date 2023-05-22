@@ -223,7 +223,7 @@ def eval_model_by_finetuning_on_task(
     return test_metrics
 
 
-def eval_model_by_finetuning_on_tasks(
+def validate_model_by_finetuning_on_tasks(
     model: Union[MetalearningGraphBinaryClassificationTask,MetalearningGraphRegressionTask],
     model_weights: Dict[str, tf.Tensor],
     dataset: FSMolDataset,
