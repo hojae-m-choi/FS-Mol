@@ -21,8 +21,7 @@ from fs_mol.models.metalearning_graph_regression import (
 )    
 from fs_mol.utils.logging import PROGRESS_LOG_LEVEL, restrict_console_log_level
 from fs_mol.utils.metrics import (
-    BinaryEvalMetrics,
-    RegressionEvalMetrics,
+    EvalMetrics,
     BinaryMetricType,
     RegressionMetricType,
     avg_metrics_over_tasks,
@@ -158,7 +157,7 @@ def eval_model_by_finetuning_on_task(
     max_num_epochs: int = 50,
     patience: int = 10,
     quiet: bool = False,
-) -> Union[BinaryEvalMetrics,RegressionEvalMetrics]:
+) -> EvalMetrics:
     model_save_file = os.path.join(temp_out_folder, f"best_model.pkl")
     # We now need to set the parameters to their current values in the training model:
     for var in model.trainable_variables:
@@ -237,7 +236,7 @@ def validate_model_by_finetuning_on_tasks(
 ) -> float:
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> Union[BinaryEvalMetrics, RegressionEvalMetrics]:
+    ) -> EvalMetrics:
         return eval_model_by_finetuning_on_task(
             model=model,
             model_weights=model_weights,

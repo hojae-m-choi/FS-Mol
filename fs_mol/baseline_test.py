@@ -22,10 +22,10 @@ from fs_mol.models.ensemble import (train_ensemble,
                                     uncertainty_ensemble)
 
 from fs_mol.utils.cli_utils import str2bool
-from fs_mol.utils.metrics import (BinaryEvalMetrics, 
+from fs_mol.utils.metrics import (
                                   compute_binary_task_metrics, 
-                                  RegressionEvalMetrics, 
                                   compute_regression_task_metrics,
+                                  EvalMetrics,
                                   get_uncertain_indices)
 from fs_mol.utils.test_utils import (
     eval_model,
@@ -169,7 +169,7 @@ def test(
     grid_search_parameters: Optional[Dict[str, Any]] = None,
     model_params: Dict[str, Any] = {},
     regression_task: bool = False
-) -> Union[RegressionEvalMetrics,BinaryEvalMetrics]:
+) -> EvalMetrics:
     train_data = task_sample.train_samples
     test_data = task_sample.test_samples
 

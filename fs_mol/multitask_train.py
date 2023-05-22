@@ -28,7 +28,7 @@ from fs_mol.modules.graph_feature_extractor import (
     make_graph_feature_extractor_config_from_args,
 )
 from fs_mol.utils.cli_utils import add_train_cli_args, set_up_train_run
-from fs_mol.utils.metrics import avg_metrics_over_tasks, BinaryEvalMetrics
+from fs_mol.utils.metrics import avg_metrics_over_tasks, EvalMetrics
 from fs_mol.utils.test_utils import eval_model
 
 
@@ -61,7 +61,7 @@ def validate_by_finetuning_on_tasks(
 
         def test_model_fn(
             task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-        ) -> BinaryEvalMetrics:
+        ) -> EvalMetrics:
             return eval_model_by_finetuning_on_task(
                 current_model_path,
                 model_cls=GNNMultitaskModel,

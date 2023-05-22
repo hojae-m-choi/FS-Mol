@@ -40,8 +40,7 @@ from fs_mol.utils.metric_logger import MetricLogger
 from fs_mol.utils.metrics import (
     avg_task_metrics_list,
     compute_metrics,
-    BinaryEvalMetrics,
-    RegressionEvalMetrics,
+    EvalMetrics,
     BinaryMetricType,
     RegressionMetricType,
 )
@@ -276,7 +275,7 @@ def run_on_data_iterable(
     quiet: bool = False,
     metric_name_prefix: str = "",
     aml_run=None,
-) -> Tuple[float, Dict[int, Union[BinaryEvalMetrics, RegressionEvalMetrics]]]:
+) -> Tuple[float, Dict[int, EvalMetrics]]:
     """Run the given model on the provided data loader.
 
     Args:
@@ -445,7 +444,7 @@ def eval_model_by_finetuning_on_task(
     quiet: bool = False,
     device: Optional[torch.device] = None,
     config_overrides: Dict[str, Any] = {},
-) -> Union[BinaryEvalMetrics,RegressionEvalMetrics]:
+) -> EvalMetrics:
     # Build the model afresh and load the shared weights.
     config_overrides.update({"num_tasks": 1})  # this forcing num_taks as 1
     model: AbstractTorchFSMolModel[
@@ -515,7 +514,7 @@ def eval_model_by_finetuning_on_task_w_activelearning(
     seed: int = 0,
     quiet: bool = False,
     device: Optional[torch.device] = None,
-) -> BinaryEvalMetrics:
+) -> EvalMetrics:
     
     # Init active-learning label
     ac_label = ActiveLearningLabel(oracle_size=len(X_train))  ## AL

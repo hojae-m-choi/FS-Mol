@@ -14,7 +14,7 @@ from fs_mol.data.multitask import get_multitask_inference_batcher
 from fs_mol.models.abstract_torch_fsmol_model import resolve_starting_model_file
 from fs_mol.models.gnn_multitask import GNNMultitaskModel
 from fs_mol.multitask_train import eval_model_by_finetuning_on_task
-from fs_mol.utils.metrics import BinaryEvalMetrics
+from fs_mol.utils.metrics import EvalMetrics
 from fs_mol.utils.test_utils import add_eval_cli_args, eval_model, set_up_test_run
 
 
@@ -96,7 +96,7 @@ def main():
 
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> BinaryEvalMetrics:
+    ) -> EvalMetrics:
         return eval_model_by_finetuning_on_task(
             model_weights_file,
             model_cls=GNNMultitaskModel,

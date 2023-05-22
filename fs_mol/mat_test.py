@@ -18,7 +18,7 @@ from fs_mol.models.abstract_torch_fsmol_model import (
     eval_model_by_finetuning_on_task,
 )
 from fs_mol.models.mat import MATModel
-from fs_mol.utils.metrics import BinaryEvalMetrics
+from fs_mol.utils.metrics import EvalMetrics
 from fs_mol.utils.test_utils import add_eval_cli_args, eval_model, set_up_test_run
 
 
@@ -105,7 +105,7 @@ def main():
 
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> BinaryEvalMetrics:
+    ) -> EvalMetrics:
         return eval_model_by_finetuning_on_task(
             model_weights_file,
             model_cls=MATModel,

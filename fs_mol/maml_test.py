@@ -25,7 +25,7 @@ from fs_mol.models.metalearning_graph_regression import (
 from fs_mol.utils.logging import FileLikeLogger
 from fs_mol.data.maml import FSMolStubGraphDataset
 from fs_mol.utils.maml_utils import eval_model_by_finetuning_on_task
-from fs_mol.utils.metrics import BinaryEvalMetrics
+from fs_mol.utils.metrics import EvalMetrics
 from fs_mol.utils.test_utils import add_eval_cli_args, eval_model, set_up_test_run
 
 
@@ -80,7 +80,7 @@ def run_from_args(args) -> None:
 
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> BinaryEvalMetrics:
+    ) -> EvalMetrics:
         return eval_model_by_finetuning_on_task(
             model=model,
             model_weights=base_model_weights,

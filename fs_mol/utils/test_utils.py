@@ -21,7 +21,7 @@ from fs_mol.data.fsmol_task_sampler import (
 )
 from fs_mol.utils.cli_utils import set_seed
 from fs_mol.utils.logging import prefix_log_msgs, set_up_logging
-from fs_mol.utils.metrics import BinaryEvalMetrics, RegressionEvalMetrics
+from fs_mol.utils.metrics import BinaryEvalMetrics, RegressionEvalMetrics, EvalMetrics
 
 
 logger = logging.getLogger(__name__)
@@ -281,7 +281,7 @@ def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSamp
     
 
 def eval_model(
-    test_model_fn: Callable[[FSMolTaskSample, str, int], BinaryEvalMetrics],
+    test_model_fn: Callable[[FSMolTaskSample, str, int], EvalMetrics],
     dataset: FSMolDataset,
     train_set_sample_sizes: List[int],
     out_dir: Optional[str] = None,
@@ -299,7 +299,7 @@ def eval_model(
             sample in the form of an FSMolTaskSample. The test_model_fn should act on the task
             sample with the model, using a temporary output folder and seed. All other required
             variables should be defined in the same context as the callable. The function should
-            return a BinaryEvalMetrics object from the task.
+            return a EvalMetrics object from the task.
         dataset: An FSMolDataset with paths to the data to be evaluated supplied.
         train_set_samples_sizes: List[int], a list of the support set sizes at which to evaluate,
             this is the train_samples size in a TaskSample.
@@ -371,7 +371,7 @@ def eval_model_n_trials(test_model_fn,
                 if out_dir is not None:
                     write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
 
-            test_metrics = test_model_fn(task_sample, temp_out_folder, local_seed)
+            test_metrics:EvalMetrics = test_model_fn(task_sample, temp_out_folder, local_seed)
             
             if isinstance(test_metrics, RegressionEvalMetrics):
                 eval_results_cls = FSMolRegTaskSampleEvalResults

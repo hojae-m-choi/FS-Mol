@@ -25,7 +25,7 @@ from scipy.stats import (
 )
 
 @dataclass(frozen=True)
-class EvalMetrics:
+class EvalRawData:
     size: int
     predictions: List[float] = field(default_factory=list)
     labels: List[float] = field(default_factory=list)
@@ -74,7 +74,7 @@ def compute_binary_task_metrics(predictions: List[float], labels: List[float]) -
     )
 
 @dataclass(frozen=True, repr=False)
-class RegressionEvalMetrics(EvalMetrics):
+class RegressionEvalMetrics(EvalRawData):
     size: int
     mae: float = 0
     rmse: float = 0
@@ -111,6 +111,7 @@ def compute_regression_task_metrics(predictions: List[float], labels: List[float
         tau=kendalltau(labels, predictions).correlation,
     )
 
+EvalMetrics = Union[BinaryEvalMetrics, RegressionEvalMetrics]
 
 def avg_metrics_over_tasks(
     task_results: Dict[str, List[BinaryEvalMetrics]],
