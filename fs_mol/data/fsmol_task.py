@@ -8,22 +8,18 @@ from dpu_utils.utils import RichPath
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, Descriptors
 
-def transform_percent(x):
-    if isinstance(x, str):
+def transform_percent(x:float) -> float:
+    if np.isnan(x):
         return x
-    if isinstance(x, (int, float)):
+    else:
         return (x-50)/45+4.5
-    else:
-        return "nan"
     
-def transform_nm(x):
-    if isinstance(x, str):
+def transform_nm(x:float) -> float:
+    if np.isnan(x):
         return x
-    if isinstance(x, (int, float)):
-        return 9-np.log10(x) if x > 0 else np.nan
     else:
-        return "nan"
-
+        return 9-np.log10(x) if x > 0 else np.nan
+    
 with open('datasets/fs-mol/topUnit.json', 'r') as file:
     CHEMBLID_TOPUNIT_DICT = json.load(file)
 
@@ -160,7 +156,7 @@ class FSMolTask:
                     task_name=get_task_name_from_path(path),
                     smiles=raw_sample["SMILES"],
                     bool_label=bool(float(raw_sample["Property"])),
-                    numeric_label=float(transform(raw_sample.get("RegressionProperty") or "nan")),
+                    numeric_label=transform(float(raw_sample.get("RegressionProperty") or "nan")),
                     log_numeric_label=float(raw_sample.get("LogRegressionProperty") or "nan"),
                     fingerprint=fingerprint,
                     descriptors=descriptors,
