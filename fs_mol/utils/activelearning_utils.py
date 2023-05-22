@@ -4,6 +4,14 @@ from fs_mol.models.ensemble import (train_ensemble,
                                     predict_ensemble,
                                     metric_ensemble,
                                     uncertainty_ensemble)
+from fs_mol.utils.heuristics import RandomSampling
+
+
+
+AL_HEURISTIC_IMPLEMENTATIONS={
+    'random': RandomSampling,
+    
+}
 
 
 def activelearning_loop(models_dict, X_train, y_train, X_test, y_test, regression_task, logger):

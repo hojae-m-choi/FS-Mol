@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Callable, Union
 from typing_extensions import Literal
 from dataclasses import dataclass, field
 
@@ -212,6 +212,28 @@ def compute_metrics(
 
     return per_task_results
 
+@dataclass(frozen=True)
+class Predictions:
+    size: int
+    trials: int
+    predictions: Union[ np.array, List[List[float]] ]  # num_samples(size), trials
+    model_map: List[int]
+    data_map: List[int]
+    # task_map: List[int]
+    
+    @property
+    def shape(self):
+        return self.size, self.trials
+    
+def compute_uncertainty_over_model(predictions, metric_fn:Callable):
+    pass
+    
+def compute_uncertainty_over_data(predictions):
+    pass
+
+def compute_uncertainty_over_task(predictions):
+    pass
+        
 def get_uncertain_indices(uncertainty, k):
     sorted_indices = np.argsort(uncertainty)  # largest index at last
     k_indices = sorted_indices[-k:]

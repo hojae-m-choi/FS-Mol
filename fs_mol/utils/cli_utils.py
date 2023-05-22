@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 import random
+import json
 import time
 from typing import Any, Optional, Tuple, Union
 
@@ -52,7 +53,33 @@ def add_train_cli_args(parser: argparse.ArgumentParser) -> None:
         "--azureml_logging", action="store_true", help="Log results using AML run context."
     )
 
-
+def add_al_cli_args(parser):
+    parser.add_argument(
+        "--active-learning", action="store_true", help="Evaluate in meta-test the models in active learning scheme"
+    )
+    
+    parser.add_argument(
+        "--query-sizes",
+        type=json.loads,
+        default=[60, 20, 20, 15, 15, 15, 15],
+        help="JSON list of number of query datapoints to sample for each cycle.",
+    )
+    
+    parser.add_argument(
+        "--inclosing-sizes",
+        type=json.loads,
+        default=[60, 60, 60, 50, 50, 48, 47],
+        help="JSON list of number of newly inclosing datapoints to sample for each cycle.",
+    )
+    
+    parser.add_argument(
+        "--heuristics",
+        type=json.loads,
+        default=["random"],  # choices: "random", 
+        help="JSON list of name of heuristics to jointly applied in active sampling.",
+    )
+    
+    
 def set_up_train_run(
     model_name: str, args: argparse.Namespace, torch: bool = False, tf: bool = False
 ) -> Tuple[str, FSMolDataset, Optional[Any]]:

@@ -355,3 +355,5 @@ helper_files/*
 datasets/chembl*
 tmp
 outputs/*
+
+model_weights

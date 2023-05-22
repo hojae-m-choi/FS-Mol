@@ -498,3 +498,94 @@ def eval_model_by_finetuning_on_task(
     )
 
     return test_metrics
+
+
+def eval_model_by_finetuning_on_task_w_activelearning(
+        eval_model_by_finetuning_on_task_fn,
+    model_weights_file: str,
+    model_cls: Type[AbstractTorchFSMolModel[BatchFeaturesType, BatchOutputType, BatchLossType]],
+    task_sample: FSMolTaskSample,
+    max_cycle: int,
+    batcher: FSMolBatcher[BatchFeaturesType, torch.Tensor],
+    learning_rate: float,
+    task_specific_learning_rate: float,
+    metric_to_use: MetricType = "avg_precision",
+    max_num_epochs: int = 50,
+    patience: int = 10,
+    seed: int = 0,
+    quiet: bool = False,
+    device: Optional[torch.device] = None,
+) -> BinaryEvalMetrics:
+    
+    # Init active-learning label
+    ac_label = ActiveLearningLabel(oracle_size=len(X_train))  ## AL
+    
+    
+    # Start active-learning cycle
+    ac_label.disclose_randomly(n = 32)  ## AL
+    ac_label.label(pool_indices_list = list(range(32)))  ## AL
+    for curr_cycle in range(3):  ## AL
+    ac_label.get_indices_for_active_cycle()
+    train_samples = [task_sample.train_samples[idx] for idx in [2,3]]
+        labelled_indices = ac_label.get_indices_for_active_cycle()  ## AL
+        X_labelled = X_train[labelled_indices, :]  ## AL
+        y_labelled = [y_train[idx] for idx in labelled_indices]  ## AL
+        
+    for curr_cycle in range(max_cycle):
+        task_sample.train_samples = 
+    test_metrics = eval_model_by_finetuning_on_task_fn(task_sample)
+    
+    # Build the model afresh and load the shared weights.
+    model: AbstractTorchFSMolModel[
+        BatchFeaturesType, BatchOutputType, BatchLossType
+    ] = model_cls.build_from_model_file(
+        model_weights_file, quiet=quiet, device=device, config_overrides={"num_tasks": 1}
+    )
+    load_model_weights(model, model_weights_file, load_task_specific_weights=False)
+
+    (optimizer, lr_scheduler) = create_optimizer(
+        model,
+        lr=learning_rate,
+        task_specific_lr=task_specific_learning_rate,
+        warmup_steps=2,
+        task_specific_warmup_steps=2,
+    )
+
+    best_valid_metric, best_model_state = train_loop(
+        model=model,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+        train_data=FSMolBatchIterable(task_sample.train_samples, batcher, shuffle=True, seed=seed),
+        valid_fn=partial(
+            validate_on_data_iterable,
+            data_iterable=FSMolBatchIterable(task_sample.valid_samples, batcher),
+            metric_to_use="loss",
+            quiet=quiet,
+        ),
+        metric_to_use=metric_to_use,
+        max_num_epochs=max_num_epochs,
+        patience=patience,
+        quiet=True,
+    )
+
+    logger.log(PROGRESS_LOG_LEVEL, f" Final validation loss:       {float(best_valid_metric):.5f}")
+    # Load best model state and eval on test data:
+    model.load_model_state(best_model_state, load_task_specific_weights=True)
+    test_loss, _test_metrics = run_on_data_iterable(
+        model, 
+        data_iterable=FSMolBatchIterable(task_sample.test_samples, batcher), 
+        quiet=quiet
+    )
+    # TODO: compute uncertainty on here
+    test_metrics = next(iter(_test_metrics.values()))
+    logger.log(PROGRESS_LOG_LEVEL, f" Test loss:                   {float(test_loss):.5f}")
+    logger.info(f" Test metrics: {test_metrics}")
+    logger.info(
+        f"Dataset sample has {task_sample.test_pos_label_ratio:.4f} positive label ratio in test data.",
+    )
+    logger.log(
+        PROGRESS_LOG_LEVEL,
+        f"Dataset sample test {metric_to_use}: {getattr(test_metrics, metric_to_use):.4f}",
+    )
+
+    return test_metrics
