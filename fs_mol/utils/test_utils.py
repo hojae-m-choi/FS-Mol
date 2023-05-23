@@ -18,8 +18,10 @@ from fs_mol.data.fsmol_task_sampler import (
     DatasetTooSmallException,
     FoldTooSmallException,
     StratifiedTaskSampler,
+    TaskSampler,
 )
-from fs_mol.utils.cli_utils import set_seed
+from fs_mol.data.active_label import ActiveLearningLabel
+from fs_mol.utils.cli_utils import set_seed, add_al_cli_args
 from fs_mol.utils.logging import prefix_log_msgs, set_up_logging
 from fs_mol.utils.metrics import BinaryEvalMetrics, RegressionEvalMetrics, EvalMetrics
 
@@ -37,11 +39,23 @@ class FSMolTaskSampleEvalResults:
     fraction_pos_test: float
 
 @dataclass(frozen=True)
+class FSMolALTaskSampleEvalResults(FSMolTaskSampleEvalResults):
+    cycle: int
+
+@dataclass(frozen=True)
 class FSMolBinTaskSampleEvalResults(BinaryEvalMetrics, FSMolTaskSampleEvalResults):
     pass
 
 @dataclass(frozen=True)
 class FSMolRegTaskSampleEvalResults(RegressionEvalMetrics, FSMolTaskSampleEvalResults):
+    pass
+
+@dataclass(frozen=True)
+class FSMolALBinTaskSampleEvalResults(BinaryEvalMetrics, FSMolALTaskSampleEvalResults):
+    pass
+
+@dataclass(frozen=True)
+class FSMolALRegTaskSampleEvalResults(RegressionEvalMetrics, FSMolALTaskSampleEvalResults):
     pass
 
 def add_data_cli_args(parser: argparse.ArgumentParser) -> None:
@@ -93,7 +107,7 @@ def add_eval_cli_args(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="Number of test samples to take, default is take all remaining after splitting out train.",
     )
-
+    add_al_cli_args(parser)
 
 def set_up_dataset(args: argparse.Namespace, **kwargs):
     # Handle the different task entry methods.
@@ -113,6 +127,17 @@ def set_up_dataset(args: argparse.Namespace, **kwargs):
 def set_up_test_run(
     model_name: str, args: argparse.Namespace, torch: bool = False, tf: bool = False
 ) -> Tuple[str, FSMolDataset]:
+    """set_seed, set run_name, set/make out_dir, set_up_logging, set_up_dataset
+
+    Args:
+        model_name (str): _description_
+        args (argparse.Namespace): _description_
+        torch (bool, optional): _description_. Defaults to False.
+        tf (bool, optional): _description_. Defaults to False.
+
+    Returns:
+        Tuple[str, FSMolDataset]: _description_
+    """
     set_seed(args.seed, torch=torch, tf=tf)
     run_name = f"FSMol_Eval_{model_name}_{time.strftime('%Y-%m-%d_%H-%M-%S')}"
     out_dir = os.path.join(args.save_dir, run_name)
@@ -163,18 +188,23 @@ def write_csv_samples(output_csv_file: str,
                 
                 
 def write_csv_pred_label(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
-    
-    with open(output_csv_file, "w", newline="") as csv_file:
-        fieldnames = [
+    common_fieldnames = [
             "num_train_requested",
             "num_train",
             "fraction_positive_train",
             "seed",
-            "pred_label",
-            "pred",
-            "label",
-        ]
-        csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+            ]
+        
+    if len(test_results) > 0 and isinstance(test_results[0], FSMolALTaskSampleEvalResults):
+            common_fieldnames.extend(['cycle'])
+    
+    common_fieldnames.extend([
+        "pred_label",
+        "pred",
+        "label",])
+    
+    with open(output_csv_file, "w", newline="") as csv_file:    
+        csv_writer = csv.DictWriter(csv_file, fieldnames=common_fieldnames)
         csv_writer.writeheader()
 
         for test_result in test_results:
@@ -184,6 +214,10 @@ def write_csv_pred_label(output_csv_file: str, test_results: Iterable[FSMolTaskS
                     "fraction_positive_train": test_result.fraction_pos_train,
                     "seed": test_result.seed,
                 }
+            
+            if isinstance(test_result, FSMolALTaskSampleEvalResults):
+                common_cols.update({'cycle': test_result.cycle})
+        
             for pred, label in zip(test_result.predictions, test_result.labels):
                 csv_writer.writerow(
                     {
@@ -203,7 +237,11 @@ def get_fields_from_result(test_result):
         "fraction_positive_test": test_result.fraction_pos_test,
         "seed": test_result.seed,
         }
-    if isinstance(test_result, FSMolRegTaskSampleEvalResults):
+    
+    if isinstance(test_result, FSMolALTaskSampleEvalResults):
+        common_field_dict.update({'cycle': test_result.cycle})
+        
+    if isinstance(test_result, RegressionEvalMetrics):
         return {
             **common_field_dict,
             "mean_absolute_error": test_result.mae,
@@ -215,7 +253,7 @@ def get_fields_from_result(test_result):
             "r_squared": test_result.r2,
             "kendall_tau": test_result.tau,
             }
-    elif isinstance(test_result, FSMolBinTaskSampleEvalResults):
+    elif isinstance(test_result, BinaryEvalMetrics):
         return {
             **common_field_dict,
             "average_precision_score": test_result.avg_precision,
@@ -228,7 +266,7 @@ def get_fields_from_result(test_result):
             "delta_auprc": test_result.avg_precision - test_result.fraction_pos_test,
             }
     else:
-        raise NotImplementedError
+        raise NotImplementedError( f"type: {type(test_result)} is not implemented yet. {test_result!r}" )
 
 def get_fieldnames_from_result(test_result):
     common_fieldnames = [
@@ -239,7 +277,11 @@ def get_fieldnames_from_result(test_result):
         "fraction_positive_test",
         "seed",
         "valid_score"]
-    if isinstance(test_result, FSMolRegTaskSampleEvalResults):
+    
+    if isinstance(test_result, FSMolALTaskSampleEvalResults):
+        common_fieldnames.insert(-1, 'cycle')
+        
+    if isinstance(test_result, RegressionEvalMetrics):
         return [
             *common_fieldnames,
             'mean_absolute_error', 
@@ -251,7 +293,7 @@ def get_fieldnames_from_result(test_result):
             'r_squared', 
             'kendall_tau'
             ]
-    elif isinstance(test_result, FSMolBinTaskSampleEvalResults):
+    elif isinstance(test_result, BinaryEvalMetrics):
         return [
             *common_fieldnames,
             "average_precision_score",
@@ -264,7 +306,7 @@ def get_fieldnames_from_result(test_result):
             "delta_auprc",
             ]
     else:
-        raise NotImplementedError
+        raise NotImplementedError( f"type: {type(test_result)} is not implemented yet. {test_result!r}" )
     
 def write_csv_summary(output_csv_file: str, test_results: Iterable[FSMolTaskSampleEvalResults]):
     if len(test_results) == 0:
@@ -291,6 +333,7 @@ def eval_model(
     fold: DataFold = DataFold.TEST,
     task_reader_fn: Optional[Callable[[List[RichPath], int], Iterable[FSMolTask]]] = None,
     seed: int = 0,
+    al: bool = False,
 ) -> Dict[str, List[FSMolTaskSampleEvalResults]]:
     """Evaluate a model on the FSMolDataset passed.
 
@@ -324,12 +367,19 @@ def eval_model(
                 test_size_or_ratio=test_size_or_ratio,
                 allow_smaller_test=True,
             )
-            test_results.extend(
-                eval_model_n_trials(test_model_fn, 
-                                    task, task_sampler, 
-                                    num_samples, seed,
-                                    out_dir=out_dir)
-                                    )
+            if al:
+                eval_model_n_trials = eval_model_n_trials_w_al
+            else:
+                eval_model_n_trials = eval_model_n_trials
+            with prefix_log_msgs(f"Test - Task {task.name} - Size {train_size:3d}" ):
+                test_results.extend(
+                    eval_model_n_trials(test_model_fn, 
+                                        task, 
+                                        task_sampler, 
+                                        num_samples, 
+                                        seed,
+                                        out_dir=out_dir)
+                                        )
 
         task_to_results[task.name] = test_results
 
@@ -341,17 +391,17 @@ def eval_model(
 
     return task_to_results
 
-def eval_model_n_trials(test_model_fn, 
-                        task, task_sampler, 
-                        num_samples, seed,
+def eval_model_n_trials_w_al(test_model_fn, 
+                        task, 
+                        task_sampler: TaskSampler, 
+                        num_samples: int, 
+                        seed: int,
                         out_dir: Optional[str] = None,):
     test_results: List[FSMolTaskSampleEvalResults] = []
     train_size = task_sampler._train_size_or_ratio
     for run_idx in range(num_samples):
         logger.info(f"=== Evaluating on {task.name}, #train {train_size}, run {run_idx}")
-        with prefix_log_msgs(
-            f" Test - Task {task.name} - Size {train_size:3d} - Run {run_idx}"
-        ), tempfile.TemporaryDirectory() as temp_out_folder:
+        with prefix_log_msgs( f"- Run {run_idx}" ), tempfile.TemporaryDirectory() as temp_out_folder:
             local_seed = seed + run_idx
 
             try:
@@ -371,19 +421,142 @@ def eval_model_n_trials(test_model_fn,
                 if out_dir is not None:
                     write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
 
-            test_metrics:EvalMetrics = test_model_fn(task_sample, temp_out_folder, local_seed)
+            test_metrics_dict:Dict[int, EvalMetrics] = test_model_fn(task_sample, temp_out_folder, local_seed)
+            
+            for curr_cycle, test_metrics in test_metrics_dict.items():
+                if isinstance(test_metrics, RegressionEvalMetrics):
+                    eval_results_cls = FSMolALRegTaskSampleEvalResults
+                elif isinstance(test_metrics, BinaryEvalMetrics):
+                    eval_results_cls = FSMolALBinTaskSampleEvalResults
+                else:
+                    raise NotImplementedError( f"type: {type(test_metrics)} is not implemented yet. {test_metrics!r}" )
+                    
+                test_results.append(
+                    eval_results_cls(
+                        task_name=task.name,
+                        seed=local_seed,
+                        cycle=curr_cycle,
+                        num_train=train_size,
+                        num_test=len(task_sample.test_samples),
+                        fraction_pos_train=task_sample.train_pos_label_ratio,
+                        fraction_pos_test=task_sample.test_pos_label_ratio,
+                        **dataclasses.asdict(test_metrics),
+                    )
+                )
+    return test_results
+
+
+def eval_model_n_trials(test_model_fn, 
+                        task, 
+                        task_sampler: TaskSampler, 
+                        num_samples: int, 
+                        seed: int,
+                        out_dir: Optional[str] = None,):
+    test_results: List[FSMolTaskSampleEvalResults] = []
+    train_size = task_sampler._train_size_or_ratio
+    for run_idx in range(num_samples):
+        logger.info(f"=== Evaluating on {task.name}, #train {train_size}, run {run_idx}")
+        with prefix_log_msgs( f"- Run {run_idx}"), tempfile.TemporaryDirectory() as temp_out_folder:
+            local_seed = seed + run_idx
+
+            try:
+                task_sample = task_sampler.sample(task, seed=local_seed)
+            except (
+                DatasetTooSmallException,
+                DatasetClassTooSmallException,
+                FoldTooSmallException,
+                ValueError,
+            ) as e:
+                logger.debug(
+                    f"Failed to draw sample with {train_size} train points for {task.name}. Skipping."
+                )
+                logger.debug("Sampling error: " + str(e))
+                continue
+            else:
+                if out_dir is not None:
+                    write_csv_samples(os.path.join(out_dir, f"{task.name}_{local_seed}_samples.csv"),task_sample)
+
+            test_metrics_dict:Dict[int, EvalMetrics] = test_model_fn(task_sample, temp_out_folder, local_seed)
+            
+            for curr_cycle, test_metrics in test_metrics_dict.items():
+                if isinstance(test_metrics, RegressionEvalMetrics):
+                    eval_results_cls = FSMolALRegTaskSampleEvalResults
+                elif isinstance(test_metrics, BinaryEvalMetrics):
+                    eval_results_cls = FSMolALBinTaskSampleEvalResults
+                else:
+                    raise NotImplementedError( f"type: {type(test_metrics)} is not implemented yet. {test_metrics!r}" )
+                    
+                test_results.append(
+                    eval_results_cls(
+                        task_name=task.name,
+                        seed=local_seed,
+                        cycle=curr_cycle,
+                        num_train=train_size,
+                        num_test=len(task_sample.test_samples),
+                        fraction_pos_train=task_sample.train_pos_label_ratio,
+                        fraction_pos_test=task_sample.test_pos_label_ratio,
+                        **dataclasses.asdict(test_metrics),
+                    )
+                )
+    return test_results
+
+
+
+def eval_model_w_al(test_model_fn, 
+                    task, 
+                    task_sample: FSMolTaskSample,
+                    query_sizes: List[int],
+                    disclosing_sizes: List[int],
+                    seed: int,
+                    train_size: int,
+                    out_dir: Optional[str] = None,):
+    test_results: List[FSMolTaskSampleEvalResults] = []
+    
+    ac_label = ActiveLearningLabel(oracle_size=len(task_sample.train_samples))  ## AL
+    cycle_metrics_dict = {key:[] for key in range(1, len(query_sizes))}  ## AL
+    # Start active-learning cycle
+    ac_label.disclose_randomly(n = disclosing_sizes[0])  ## AL
+    ac_label.label(pool_indices_list = list(range(query_sizes[0])))  ## AL
+    
+    for curr_cycle in range(1, len(query_sizes)):
+        with prefix_log_msgs( f"- Cycle {curr_cycle}" ), tempfile.TemporaryDirectory() as temp_out_folder:
+            local_seed = seed
+            
+            labelled_indices = ac_label.get_indices_for_active_cycle()  ## AL
+            curr_task_sample = task_sample.copy(train_samples=task_sample.train_samples[labelled_indices])
+            test_metrics: EvalMetrics = test_model_fn(curr_task_sample, temp_out_folder, local_seed)
+            
+            # Import disclosed samples into pool
+            ac_label.disclose_randomly(n = disclosing_sizes[curr_cycle])  ## AL
+            unlabelled_indices = ac_label.unlabelled_indices  ## AL
+            X_pool = X_train[unlabelled_indices, :]  ## AL
+            
+            # Extract uncertain samples
+            logger.info(f" Computing uncertainty with {X_pool.shape[0]} datapoints.")  ## AL
+            pool_predictions_dict = predict_ensemble(trained_models_dict, X_pool, regression_task)  ## AL
+            uncertainty = uncertainty_ensemble(pool_predictions_dict)  ## AL
+            sampled_pool_indices = get_uncertain_indices(uncertainty, k = query_sizes[curr_cycle])  ## AL
+            
+            # Label selected samples
+            logger.info(f" Label {len(sampled_pool_indices)} datapoints.")  ## AL
+            ac_label.label(sampled_pool_indices)  ## AL
+            
+            # labels = test_metrics.labels
+            # query_method = RandomSampling (model, input_shape=(28,28), num_labels=10, gpu=1):
+            # query_method.query(X_pool, Y_pool, amount)
             
             if isinstance(test_metrics, RegressionEvalMetrics):
-                eval_results_cls = FSMolRegTaskSampleEvalResults
+                eval_results_cls = FSMolALRegTaskSampleEvalResults
             elif isinstance(test_metrics, BinaryEvalMetrics):
-                eval_results_cls = FSMolBinTaskSampleEvalResults
+                eval_results_cls = FSMolALBinTaskSampleEvalResults
             else:
-                raise NotImplementedError
-                
+                raise NotImplementedError( f"type: {type(test_metrics)} is not implemented yet. {test_metrics!r}" )
+            
             test_results.append(
                 eval_results_cls(
                     task_name=task.name,
                     seed=local_seed,
+                    cycle = curr_cycle,
                     num_train=train_size,
                     num_test=len(task_sample.test_samples),
                     fraction_pos_train=task_sample.train_pos_label_ratio,

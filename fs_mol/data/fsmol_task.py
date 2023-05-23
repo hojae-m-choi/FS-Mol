@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from typing import List, Optional, Tuple
 import json 
 
@@ -205,3 +205,9 @@ class FSMolTaskSample:
     @property
     def test_pos_label_ratio(self) -> float:
         return self.__compute_positive_fraction(self.test_samples)
+
+    def copy(self, *args, **kwargs):
+        assert len(args) == 0
+        original_dict = asdict(self)
+        original_dict.update(**kwargs)
+        return FSMolTaskSample(**original_dict)

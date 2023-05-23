@@ -66,17 +66,19 @@ def add_al_cli_args(parser):
     )
     
     parser.add_argument(
-        "--inclosing-sizes",
+        "--disclosing-sizes",
         type=json.loads,
         default=[60, 60, 60, 50, 50, 48, 47],
-        help="JSON list of number of newly inclosing datapoints to sample for each cycle.",
+        help="JSON list of number of newly disclosing datapoints to sample for each cycle.",
     )
     
     parser.add_argument(
-        "--heuristics",
-        type=json.loads,
-        default=["random"],  # choices: "random", 
-        help="JSON list of name of heuristics to jointly applied in active sampling.",
+        "--heuristic",
+        type=str,
+        nargs='+',
+        dest='heuristics',
+        default="random",  # choices: "random", "inv_var_ensemble"
+        help="appeded names of heuristics to jointly applied in active sampling.",
     )
     
     

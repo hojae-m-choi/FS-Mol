@@ -3,6 +3,7 @@ import json
 import logging
 import sys
 from typing import Dict, Optional, List, Any, Union
+from functools import partial
 
 import numpy as np
 import sklearn.ensemble
@@ -20,7 +21,7 @@ from fs_mol.models.ensemble import (train_ensemble,
                                     predict_ensemble,
                                     metric_ensemble,
                                     uncertainty_ensemble)
-
+from fs_mol.utils.logging import prefix_log_msgs
 from fs_mol.utils.cli_utils import str2bool
 from fs_mol.utils.metrics import (
                                   compute_binary_task_metrics, 
@@ -28,11 +29,11 @@ from fs_mol.utils.metrics import (
                                   EvalMetrics,
                                   get_uncertain_indices)
 from fs_mol.utils.test_utils import (
-    eval_model,
-    add_eval_cli_args,
-    set_up_test_run,
-)
-
+                                    eval_model,
+                                    add_eval_cli_args,
+                                    set_up_test_run,)
+from fs_mol.utils.heuristics import (
+                                    RandomSampling)
 logger = logging.getLogger(__name__)
 
 # TODO: extend to whichever models seem useful.
@@ -70,8 +71,11 @@ def test_with_active_learning(
     use_grid_search: bool = True,
     grid_search_parameters: Optional[Dict[str, Any]] = None,
     model_params: Dict[str, Any] = {},
-    regression_task: bool = False
-) -> Union[RegressionEvalMetrics,BinaryEvalMetrics]:
+    regression_task: bool = False,
+    query_sizes: List[int] = None,
+    disclosing_sizes: List[int] = None,
+    heuristics: List[str] = [],
+) -> Dict[int, EvalMetrics]:
     train_data = task_sample.train_samples
     test_data = task_sample.test_samples
     
@@ -123,43 +127,54 @@ def test_with_active_learning(
     # Init active-learning label
     ac_label = ActiveLearningLabel(oracle_size=len(X_train))  ## AL
     
+    cycle_metrics_dict = {key:[] for key in range(1, len(query_sizes))}  ## AL
     # Start active-learning cycle
-    ac_label.disclose_randomly(n = 32)  ## AL
-    ac_label.label(pool_indices_list = list(range(32)))  ## AL
-    for curr_cycle in range(3):  ## AL
-        labelled_indices = ac_label.get_indices_for_active_cycle()  ## AL
-        X_labelled = X_train[labelled_indices, :]  ## AL
-        y_labelled = [y_train[idx] for idx in labelled_indices]  ## AL
-        
-        # Train models:
-        logger.info(f" AL cycle-{curr_cycle} with {X_labelled.shape[0]} datapoints.")
-        trained_models_dict = train_ensemble(models_dict, X_labelled, y_labelled)
-        
-        # Compute test results:
-        test_predictions_dict = predict_ensemble(trained_models_dict, X_test, regression_task)
-        test_metrics = metric_ensemble(test_predictions_dict, y_test, regression_task)
-        logger.info(f" Test metrics: {test_metrics}")
-        
-        # Import disclosed samples into pool
-        ac_label.disclose_randomly(n = 28)  ## AL
-        unlabelled_indices = ac_label.unlabelled_indices  ## AL
-        X_pool = X_train[unlabelled_indices, :]  ## AL
-        
-        # Extract uncertain samples
-        logger.info(f" Computing uncertainty with {X_pool.shape[0]} datapoints.")  ## AL
-        pool_predictions_dict = predict_ensemble(trained_models_dict, X_pool, regression_task)  ## AL
-        uncertainty = uncertainty_ensemble(pool_predictions_dict)  ## AL
-        sampled_pool_indices = get_uncertain_indices(uncertainty, k = 10)  ## AL
-        
-        # Label selected samples
-        logger.info(f" Label {len(sampled_pool_indices)} datapoints.")  ## AL
-        ac_label.label(sampled_pool_indices)  ## AL
+    ac_label.disclose_randomly(n = disclosing_sizes[0])  ## AL
+    ac_label.label(pool_indices_list = list(range(query_sizes[0])))  ## AL
+    for curr_cycle in range(1, len(query_sizes)):  ## AL
+        with prefix_log_msgs( f"- Cycle {curr_cycle}" ):
+            labelled_indices = ac_label.get_indices_for_active_cycle()  ## AL
+            X_labelled = X_train[labelled_indices, :]  ## AL
+            y_labelled = [y_train[idx] for idx in labelled_indices]  ## AL
+            
+            # Train models:
+            logger.info(f" Training with {X_labelled.shape[0]} datapoints.")
+            trained_models_dict = train_ensemble(models_dict, X_labelled, y_labelled)
+            
+            # Compute test results:
+            test_predictions_dict = predict_ensemble(trained_models_dict, X_test, regression_task)
+            test_metrics = metric_ensemble(test_predictions_dict, y_test, regression_task)
+            logger.info(f" Test metrics: {test_metrics}")
+            cycle_metrics_dict[curr_cycle] = test_metrics
+            
+            # Import disclosed samples into pool
+            ac_label.disclose_randomly(n = disclosing_sizes[curr_cycle])  ## AL
+            unlabelled_indices = ac_label.unlabelled_indices  ## AL
+            X_pool = X_train[unlabelled_indices, :]  ## AL
+            
+            # Extract uncertain samples
+            logger.info(f" Computing uncertainty with {X_pool.shape[0]} datapoints.")  ## AL
+            
+            if "random" in heuristics:
+                querymethod = RandomSampling()
+                sampled_pool_indices = querymethod.query(samples=X_pool, 
+                                                         amount=query_sizes[curr_cycle])  ## AL
+            elif "inv_var_ensemble" in heuristics:
+                pool_predictions_dict = predict_ensemble(trained_models_dict, X_pool, regression_task)  ## AL
+                uncertainty = uncertainty_ensemble(pool_predictions_dict)  ## AL
+                sampled_pool_indices = get_uncertain_indices(uncertainty, k = query_sizes[curr_cycle])  ## AL
+            else:
+                raise NotImplementedError()
+            
+            # Label selected samples
+            logger.info(f" Label {len(sampled_pool_indices)} datapoints.")  ## AL
+            ac_label.label(sampled_pool_indices)  ## AL
         
     logger.info(
         f" Dataset sample has {task_sample.test_pos_label_ratio:.4f} positive label ratio in test data."
     )
 
-    return test_metrics
+    return cycle_metrics_dict
 
 
 def test(
@@ -229,16 +244,24 @@ def test(
 
 def run_from_args(args) -> None:
     out_dir, dataset = set_up_test_run(args.model, args)
-
+    if args.active_learning:
+        test_fn = partial(test_with_active_learning,
+                          query_sizes = args.query_sizes,
+                          disclosing_sizes = args.disclosing_sizes
+        )
+    else:
+        test_fn = test
+        
     def test_model_fn(
         task_sample: FSMolTaskSample, temp_out_folder: str, seed: int
-    ) -> Union[RegressionEvalMetrics, BinaryEvalMetrics]:
-        return test_with_active_learning(
+    ) -> EvalMetrics:
+        return test_fn(
             model_name=args.model,
             task_sample=task_sample,
             use_grid_search=args.grid_search,
             model_params=args.model_params,
-            regression_task=args.regression_task
+            regression_task=args.regression_task,
+            heuristics=args.heuristics,
         )
 
     eval_model(
@@ -248,6 +271,7 @@ def run_from_args(args) -> None:
         out_dir=out_dir,
         num_samples=args.num_runs,
         seed=args.seed,
+        al = args.active_learning,
     )
 
 
