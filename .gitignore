@@ -350,8 +350,11 @@ MigrationBackup/
 .ionide/
 
 datasets/fs-mol*
-
+datasets/fsmol*
+datasets/entire*
 helper_files/*
 datasets/chembl*
 tmp
 outputs/*
+third_party
+model_weight-debug/*
