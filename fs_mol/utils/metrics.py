@@ -96,19 +96,27 @@ RegressionMetricType = Literal[
 
 def compute_regression_task_metrics(predictions: List[float], labels: List[float]) -> RegressionEvalMetrics:
     # predictions should be inverse-scaled value
+    eval_metric_dict = {}
+    
+    try:
+        eval_metric_dict.update({'mae': mean_absolute_error(labels, predictions)})
+    except ValueError as e:
+        print(f'labels: {labels}', f'predictions: {predictions}')
+        raise e
+    
+    eval_metric_dict.update({'rmse': np.sqrt(mean_squared_error(labels, predictions))})
     
     return RegressionEvalMetrics(
         size=len(predictions),
         predictions=predictions,
         labels=labels,
-        mae=mean_absolute_error(labels, predictions),
-        rmse=np.sqrt(mean_squared_error(labels, predictions)),
         mxe=max_error(labels, predictions),
         pcc=pearsonr(labels, predictions)[0],
-        ci=(kendalltau(labels, predictions).correlation+1)/2, # 'correlation' for scipy==1.7.3, but 'statistic' for scipy==1.10.1
+        ci=(kendalltau(labels, predictions).correlation+1)/2, # Attribute name in library changed: 'correlation' for scipy==1.7.3, but 'statistic' for scipy==1.10.1
         scc=spearmanr(labels, predictions).correlation,
         r2=r2_score(labels, predictions),
         tau=kendalltau(labels, predictions).correlation,
+        **eval_metric_dict
     )
 
 
