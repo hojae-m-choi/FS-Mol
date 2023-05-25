@@ -77,7 +77,7 @@ def add_al_cli_args(parser):
         type=str,
         nargs='+',
         dest='heuristics',
-        default="random",  # choices: "random", "inv_var_ensemble"
+        default="random",  # choices: "random", "var_ensemble", "coreset"
         help="appeded names of heuristics to jointly applied in active sampling.",
     )
     

@@ -159,7 +159,7 @@ def test_with_active_learning(
                 querymethod = RandomSampling()
                 sampled_pool_indices = querymethod.query(samples=X_pool, 
                                                          amount=query_sizes[curr_cycle])  ## AL
-            elif "inv_var_ensemble" in heuristics:
+            elif "var_ensemble" in heuristics:
                 pool_predictions_dict = predict_ensemble(trained_models_dict, X_pool, regression_task)  ## AL
                 uncertainty = uncertainty_ensemble(pool_predictions_dict)  ## AL
                 sampled_pool_indices = get_uncertain_indices(uncertainty, k = query_sizes[curr_cycle])  ## AL

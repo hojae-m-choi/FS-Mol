@@ -8,4 +8,8 @@ python fs_mol/baseline_test.py\
             --train-sizes "[375]"\
             --test-size 30\
             --active-learning\
-            --heuristic random
+            --heuristic var_ensemble
+            
+            
+            
+            # random

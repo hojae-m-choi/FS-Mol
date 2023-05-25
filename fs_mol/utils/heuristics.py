@@ -80,7 +80,7 @@ class RandomSampling(QueryMethod):
 
 
 class InvVarSampling(QueryMethod):
-    __name__ = 'inv_var_ensemble'
+    __name__ = 'var_ensemble'
     
     def __init__(self, model,  num_labels, gpu):
         super().__init__(model,  num_labels, gpu)

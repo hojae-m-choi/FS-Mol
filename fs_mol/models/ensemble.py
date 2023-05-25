@@ -42,5 +42,5 @@ def metric_ensemble(predictions_dict, y_test, regression_task, reduce = np.mean,
 
 def uncertainty_ensemble(predictions_dict, reduce = np.std, **reduce_kwargs):
     y_predicted = np.stack([y_predicted for y_predicted in predictions_dict.values()], axis=-1)
-    uncertainty_ensemble = 1/reduce(y_predicted, axis=-1, **reduce_kwargs)
+    uncertainty_ensemble = reduce(y_predicted, axis=-1, **reduce_kwargs)
     return uncertainty_ensemble
