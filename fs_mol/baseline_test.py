@@ -150,6 +150,7 @@ def test_with_active_learning(
             # Import disclosed samples into pool
             ac_label.disclose_randomly(n = disclosing_sizes[curr_cycle])  ## AL
             unlabelled_indices = ac_label.unlabelled_indices  ## AL
+            unlabelled_indices = ac_label.get_unlabelled_indices_for_active_cycle(curr_cycle)  ## AL
             X_pool = X_train[unlabelled_indices, :]  ## AL
             
             # Extract uncertain samples

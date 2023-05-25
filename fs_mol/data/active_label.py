@@ -70,6 +70,23 @@ class ActiveLearningLabel:
             raise ValueError("train_val argument must be either train or valid")
         return oracle_indices
     
+    def get_unlabelled_indices_for_active_cycle(self, min_cycle: int = None) -> List[int]:
+        """Returns the indices disclosed for the active cycle.
+        Returns the indices of the unlabelled items. Also takes into account self.last_active_cycle.
+        Returns:
+            List of the selected indices for labeling.
+        """
+        if min_cycle is not None:
+            min_unlabelled_cycle = min_cycle
+        elif self.last_active_cycles == -1:  ## ??
+            min_unlabelled_cycle = 0
+        else:
+            min_unlabelled_cycle = max(0, self.current_al_cycle - self.last_active_cycles)
+
+        # we need to work with lists since arrow dataset is not compatible with np.int types!
+        oracle_indices = [indx for indx, val in enumerate(self.disclosed_map) if val > min_unlabelled_cycle]
+        return oracle_indices
+    
     @property
     def closed_indices(self) -> List[int]:
         oracle_indices = [indx for indx, bool_val in enumerate(~self.disclosed) if bool_val]
