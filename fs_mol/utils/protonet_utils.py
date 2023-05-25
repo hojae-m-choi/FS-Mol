@@ -86,7 +86,7 @@ def run_on_batches(
         task_preds.append(batch_preds[:, 1])
         task_labels.append(batch_labels.detach().cpu().numpy())
 
-    metrics = compute_binary_task_metrics(
+    metrics = compute_binary_task_metrics(  # TODO: regression task
         predictions=np.concatenate(task_preds, axis=0), labels=np.concatenate(task_labels, axis=0)
     )
 
